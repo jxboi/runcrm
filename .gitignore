@@ -15,10 +15,14 @@
 
 # next.js
 /.next/
+/.vinext/
 /out/
+/dist/
+/.wrangler/
 
 # production
-/build
+/build/*
+!/build/sites-vite-plugin.ts
 
 # misc
 .DS_Store

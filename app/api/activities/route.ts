@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const contactId = searchParams.get("contact_id");
   const dealId = searchParams.get("deal_id");
   return NextResponse.json(
-    listActivities({
+    await listActivities({
       contact_id: contactId ? Number(contactId) : undefined,
       deal_id: dealId ? Number(dealId) : undefined,
     })

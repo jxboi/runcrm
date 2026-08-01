@@ -7,7 +7,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   try {
     const { id } = await ctx.params;
     const body = await req.json();
-    const agent = updateAgent(Number(id), body);
+    const agent = await updateAgent(Number(id), body);
     if (!agent) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     return NextResponse.json(agent);
   } catch (err) {
@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const ok = deleteAgent(Number(id));
+  const ok = await deleteAgent(Number(id));
   if (!ok) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

@@ -7,7 +7,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   try {
     const { id } = await ctx.params;
     const body = await req.json();
-    return NextResponse.json(updateTask(Number(id), body));
+    return NextResponse.json(await updateTask(Number(id), body));
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid request" }, { status: 400 });
   }

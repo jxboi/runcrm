@@ -4,7 +4,7 @@ import { createAgent, listAgents } from "@/lib/crm";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json(listAgents());
+  return NextResponse.json(await listAgents());
 }
 
 export async function POST(req: NextRequest) {
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     if (!body?.name?.trim()) {
       return NextResponse.json({ error: "Agent name is required" }, { status: 400 });
     }
-    return NextResponse.json(createAgent(body), { status: 201 });
+    return NextResponse.json(await createAgent(body), { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid request" }, { status: 400 });
   }

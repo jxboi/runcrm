@@ -14,8 +14,8 @@ export interface AgentTurnResult {
   isError: boolean;
 }
 
-function buildSystemPrompt(agent: Agent): string {
-  const roster = listAgents()
+async function buildSystemPrompt(agent: Agent): Promise<string> {
+  const roster = (await listAgents())
     .map((a) => `- ${a.emoji} ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""}`)
     .join("\n");
   const caps = ENTITIES.map((e) => `- ${e}: ${agent.capabilities[e]}`).join("\n");
@@ -43,8 +43,8 @@ ${agent.instructions || "(none)"}
 Today's date: ${new Date().toISOString().slice(0, 10)}`;
 }
 
-function buildHistory(agent: Agent): Anthropic.Beta.BetaMessageParam[] {
-  const recent = listMessages(200).slice(-60);
+async function buildHistory(agent: Agent): Promise<Anthropic.Beta.BetaMessageParam[]> {
+  const recent = (await listMessages(200)).slice(-60);
   const history: Anthropic.Beta.BetaMessageParam[] = [];
   for (const m of recent) {
     if (m.role === "agent" && m.agent_id === agent.id) {
@@ -67,8 +67,8 @@ function buildHistory(agent: Agent): Anthropic.Beta.BetaMessageParam[] {
 export async function runAgentTurn(agent: Agent): Promise<AgentTurnResult> {
   const trace: TraceEntry[] = [];
   const tools = toolsForAgent(agent);
-  const system = buildSystemPrompt(agent);
-  const messages = buildHistory(agent);
+  const system = await buildSystemPrompt(agent);
+  const messages = await buildHistory(agent);
 
   if (messages.length === 0) {
     return { text: "There's nothing in the chat for me to respond to yet.", trace, isError: false };
@@ -121,12 +121,12 @@ export async function runAgentTurn(agent: Agent): Promise<AgentTurnResult> {
 
       messages.push({ role: "assistant", content: response.content });
 
-      const results: Anthropic.Beta.BetaToolResultBlockParam[] = toolUses.map((tu) => {
+      const results: Anthropic.Beta.BetaToolResultBlockParam[] = await Promise.all(toolUses.map(async (tu) => {
         const input = (tu.input ?? {}) as Record<string, unknown>;
-        const { result, ok } = executeTool(agent, tu.name, input);
+        const { result, ok } = await executeTool(agent, tu.name, input);
         trace.push({ tool: tu.name, input, result: result.slice(0, 800), ok });
         return { type: "tool_result", tool_use_id: tu.id, content: result, is_error: !ok };
-      });
+      }));
 
       messages.push({ role: "user", content: results });
     }

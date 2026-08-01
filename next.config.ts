@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
+  /* Hosted through the Sites vinext adapter. */
 };
 
 export default nextConfig;

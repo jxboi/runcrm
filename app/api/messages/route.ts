@@ -4,5 +4,5 @@ import { listMessages } from "@/lib/crm";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json(listMessages());
+  return NextResponse.json(await listMessages());
 }

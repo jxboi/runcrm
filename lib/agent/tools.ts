@@ -29,7 +29,7 @@ interface ToolSpec {
   entity: Entity;
   level: "read" | "write";
   def: ToolDef;
-  run: (input: Record<string, unknown>, agent: Agent) => unknown;
+  run: (input: Record<string, unknown>, agent: Agent) => unknown | Promise<unknown>;
 }
 
 const num = (v: unknown): number | undefined =>
@@ -68,8 +68,8 @@ const TOOL_SPECS: ToolSpec[] = [
         required: ["id"],
       },
     },
-    run: (input) => {
-      const c = getContact(Number(input.id));
+    run: async (input) => {
+      const c = await getContact(Number(input.id));
       if (!c) throw new Error(`Contact ${input.id} not found`);
       return c;
     },
@@ -329,11 +329,11 @@ export function toolsForAgent(agent: Agent): ToolDef[] {
 const MAX_RESULT_CHARS = 6000;
 
 /** Execute one tool call on behalf of an agent, enforcing its access rights. */
-export function executeTool(
+export async function executeTool(
   agent: Agent,
   name: string,
   input: Record<string, unknown>
-): { result: string; ok: boolean } {
+): Promise<{ result: string; ok: boolean }> {
   const spec = TOOL_SPECS.find((s) => s.def.name === name);
   if (!spec) return { result: `Unknown tool: ${name}`, ok: false };
   if (!allowed(agent, spec)) {
@@ -343,7 +343,7 @@ export function executeTool(
     };
   }
   try {
-    const out = spec.run(input ?? {}, agent);
+    const out = await spec.run(input ?? {}, agent);
     let json = JSON.stringify(out ?? null);
     if (json.length > MAX_RESULT_CHARS) json = json.slice(0, MAX_RESULT_CHARS) + "…(truncated)";
     return { result: json, ok: true };

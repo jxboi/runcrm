@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const contactId = searchParams.get("contact_id");
   return NextResponse.json(
-    listDeals({
+    await listDeals({
       stage: searchParams.get("stage") ?? undefined,
       contact_id: contactId ? Number(contactId) : undefined,
     })
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    return NextResponse.json(createDeal(body), { status: 201 });
+    return NextResponse.json(await createDeal(body), { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid request" }, { status: 400 });
   }

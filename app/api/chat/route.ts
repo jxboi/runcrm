@@ -16,12 +16,12 @@ export async function POST(req: NextRequest) {
   const content = body.content?.trim();
   if (!content) return NextResponse.json({ error: "Message content is required" }, { status: 400 });
 
-  const agent = body.agentId != null ? getAgent(Number(body.agentId)) : null;
+  const agent = body.agentId != null ? await getAgent(Number(body.agentId)) : null;
   if (!agent) return NextResponse.json({ error: "Pick an agent to send this message to" }, { status: 400 });
 
-  const userMessage = insertMessage({ role: "user", content });
+  const userMessage = await insertMessage({ role: "user", content });
   const result = await runAgentTurn(agent);
-  const agentMessage = insertMessage({
+  const agentMessage = await insertMessage({
     role: "agent",
     agent_id: agent.id,
     content: result.text,
