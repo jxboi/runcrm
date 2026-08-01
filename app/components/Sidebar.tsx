@@ -1,0 +1,117 @@
+"use client";
+
+import { Agent, ENTITIES } from "@/lib/types";
+
+const ACCESS_DOT: Record<string, string> = {
+  none: "bg-slate-700",
+  read: "bg-sky-500",
+  write: "bg-emerald-500",
+};
+
+export default function Sidebar({
+  agents,
+  selectedAgentId,
+  onSelect,
+  onNewAgent,
+  onEditAgent,
+}: {
+  agents: Agent[];
+  selectedAgentId: number | null;
+  onSelect: (id: number) => void;
+  onNewAgent: () => void;
+  onEditAgent: (agent: Agent) => void;
+}) {
+  return (
+    <aside className="flex w-64 shrink-0 flex-col bg-slate-950">
+      <div className="flex items-center gap-2.5 px-5 pb-5 pt-6">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-lg shadow-indigo-950">
+          R
+        </div>
+        <div>
+          <div className="text-sm font-semibold tracking-tight text-slate-100">RunCRM</div>
+          <div className="text-[11px] text-slate-500">chat-first CRM · v0.1</div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between px-5 pb-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Agents</span>
+        <button
+          onClick={onNewAgent}
+          className="rounded-md border border-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-300 transition hover:border-indigo-500 hover:text-indigo-300"
+        >
+          + New
+        </button>
+      </div>
+
+      <div className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+        {agents.length === 0 && (
+          <div className="mx-2 mt-2 rounded-lg border border-dashed border-slate-800 p-4 text-center text-xs text-slate-500">
+            No agents yet.
+            <br />
+            Create one to start chatting.
+          </div>
+        )}
+        {agents.map((agent) => {
+          const selected = agent.id === selectedAgentId;
+          return (
+            <div
+              key={agent.id}
+              onClick={() => onSelect(agent.id)}
+              className={`group cursor-pointer rounded-lg border px-3 py-2.5 transition ${
+                selected
+                  ? "border-indigo-500/50 bg-indigo-500/10"
+                  : "border-transparent hover:border-slate-800 hover:bg-slate-900/60"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/80 text-base">
+                  {agent.emoji}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-medium text-slate-200">{agent.name}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {ENTITIES.map((e) => (
+                      <span
+                        key={e}
+                        title={`${e}: ${agent.capabilities[e]}`}
+                        className={`h-1.5 w-1.5 rounded-full ${ACCESS_DOT[agent.capabilities[e]]}`}
+                      />
+                    ))}
+                    <span className="ml-1 truncate text-[10px] text-slate-500">
+                      {agent.model.replace("claude-", "")}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    onEditAgent(agent);
+                  }}
+                  className="hidden rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-800 hover:text-slate-200 group-hover:block"
+                  title="Edit agent"
+                >
+                  ✎
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="border-t border-slate-800/70 px-5 py-3">
+        <div className="flex items-center gap-3 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> write
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" /> read
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-700" /> none
+          </span>
+        </div>
+        <div className="mt-1 text-[10px] text-slate-600">contacts · deals · activity · tasks</div>
+      </div>
+    </aside>
+  );
+}
