@@ -1,10 +1,70 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Activity, Agent, Contact, CONTACT_STATUSES, Deal, DEAL_STAGES, Task } from "@/lib/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Activity,
+  Agent,
+  Contact,
+  CONTACT_STATUSES,
+  Deal,
+  DEAL_STAGES,
+  Entity,
+  EntityRef,
+  Task,
+} from "@/lib/types";
 import { api, fmtMoney, fmtTime } from "@/lib/client";
 
 type Tab = "contacts" | "deals" | "tasks" | "activity";
+
+/** Entity names from a trace ref map onto the panel's tabs. */
+const TAB_FOR_ENTITY: Record<Entity, Tab> = {
+  contacts: "contacts",
+  deals: "deals",
+  tasks: "tasks",
+  activities: "activity",
+};
+
+/**
+ * Scrolls a record into view and rings it briefly when a trace chip points at
+ * it — the link between "the agent did this" and "here's the row it changed".
+ */
+function useFocusedRecord(focusRef: EntityRef | null, setTab: (tab: Tab) => void) {
+  const [handled, setHandled] = useState<EntityRef | null>(null);
+  const [faded, setFaded] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Switching tabs is derived from the request, so it happens during render
+  // rather than in an effect — no second render pass to show the right tab.
+  if (focusRef !== handled) {
+    setHandled(focusRef);
+    setFaded(false);
+    if (focusRef) setTab(TAB_FOR_ENTITY[focusRef.entity]);
+  }
+
+  const focusedId = focusRef && !faded ? `${focusRef.entity}-${focusRef.id}` : null;
+
+  useEffect(() => {
+    if (!focusRef) return;
+    const key = `${focusRef.entity}-${focusRef.id}`;
+    const scroll = requestAnimationFrame(() => {
+      containerRef.current
+        ?.querySelector(`[data-record="${key}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const fade = setTimeout(() => setFaded(true), 2600);
+    return () => {
+      cancelAnimationFrame(scroll);
+      clearTimeout(fade);
+    };
+  }, [focusRef]);
+
+  return { focusedId, containerRef };
+}
+
+/** Ring applied to the row a trace chip points at. */
+function focusClass(focusedId: string | null, entity: Entity, id: number): string {
+  return focusedId === `${entity}-${id}` ? " ring-2 ring-emerald-400/70" : "";
+}
 
 const STATUS_PILL: Record<string, string> = {
   lead: "bg-sky-500/15 text-sky-300 border-sky-500/30",
@@ -41,13 +101,15 @@ function Pill({ text, map }: { text: string; map: Record<string, string> }) {
 export default function DataPanel({
   agents,
   version,
-  busy,
+  busyAgentIds,
+  focusRef,
   onRunTask,
   onError,
 }: {
   agents: Agent[];
   version: number;
-  busy: boolean;
+  busyAgentIds: number[];
+  focusRef: EntityRef | null;
   onRunTask: (taskId: number, assigneeId: number | null) => Promise<void>;
   onError: (msg: string) => void;
 }) {
@@ -57,6 +119,7 @@ export default function DataPanel({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [runningTaskId, setRunningTaskId] = useState<number | null>(null);
+  const { focusedId, containerRef } = useFocusedRecord(focusRef, setTab);
 
   const reload = useCallback(async () => {
     try {
@@ -113,21 +176,32 @@ export default function DataPanel({
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
-        {tab === "contacts" && <ContactsTab contacts={contacts} onCreated={reload} onError={onError} />}
-        {tab === "deals" && <DealsTab deals={deals} contacts={contacts} onCreated={reload} onError={onError} />}
+      <div ref={containerRef} className="flex-1 overflow-y-auto p-3">
+        {tab === "contacts" && (
+          <ContactsTab contacts={contacts} focusedId={focusedId} onCreated={reload} onError={onError} />
+        )}
+        {tab === "deals" && (
+          <DealsTab
+            deals={deals}
+            contacts={contacts}
+            focusedId={focusedId}
+            onCreated={reload}
+            onError={onError}
+          />
+        )}
         {tab === "tasks" && (
           <TasksTab
             tasks={tasks}
             agents={agents}
-            busy={busy}
+            busyAgentIds={busyAgentIds}
             runningTaskId={runningTaskId}
+            focusedId={focusedId}
             onRun={runTask}
             onCreated={reload}
             onError={onError}
           />
         )}
-        {tab === "activity" && <ActivityTab activities={activities} />}
+        {tab === "activity" && <ActivityTab activities={activities} focusedId={focusedId} />}
       </div>
     </aside>
   );
@@ -137,10 +211,12 @@ export default function DataPanel({
 
 function ContactsTab({
   contacts,
+  focusedId,
   onCreated,
   onError,
 }: {
   contacts: Contact[];
+  focusedId: string | null;
   onCreated: () => void;
   onError: (m: string) => void;
 }) {
@@ -211,7 +287,11 @@ function ContactsTab({
         </div>
       )}
       {contacts.map((c) => (
-        <div key={c.id} className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5">
+        <div
+          key={c.id}
+          data-record={`contacts-${c.id}`}
+          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "contacts", c.id)}`}
+        >
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate text-[13px] font-medium text-slate-200">{c.name}</div>
@@ -234,11 +314,13 @@ function ContactsTab({
 function DealsTab({
   deals,
   contacts,
+  focusedId,
   onCreated,
   onError,
 }: {
   deals: Deal[];
   contacts: Contact[];
+  focusedId: string | null;
   onCreated: () => void;
   onError: (m: string) => void;
 }) {
@@ -339,7 +421,11 @@ function DealsTab({
       )}
 
       {deals.map((d) => (
-        <div key={d.id} className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5">
+        <div
+          key={d.id}
+          data-record={`deals-${d.id}`}
+          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "deals", d.id)}`}
+        >
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate text-[13px] font-medium text-slate-200">{d.title}</div>
@@ -362,16 +448,18 @@ function DealsTab({
 function TasksTab({
   tasks,
   agents,
-  busy,
+  busyAgentIds,
   runningTaskId,
+  focusedId,
   onRun,
   onCreated,
   onError,
 }: {
   tasks: Task[];
   agents: Agent[];
-  busy: boolean;
+  busyAgentIds: number[];
   runningTaskId: number | null;
+  focusedId: string | null;
   onRun: (task: Task) => void;
   onCreated: () => void;
   onError: (m: string) => void;
@@ -446,8 +534,14 @@ function TasksTab({
 
       {tasks.map((t) => {
         const isRunning = t.status === "running" || runningTaskId === t.id;
+        // Only the assignee being busy blocks a run — other agents stay free.
+        const assigneeBusy = t.assignee_agent_id != null && busyAgentIds.includes(t.assignee_agent_id);
         return (
-          <div key={t.id} className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5">
+          <div
+            key={t.id}
+            data-record={`tasks-${t.id}`}
+            className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "tasks", t.id)}`}
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="text-[13px] font-medium text-slate-200">{t.title}</div>
@@ -462,7 +556,7 @@ function TasksTab({
               {t.assignee_agent_id != null && (
                 <button
                   onClick={() => onRun(t)}
-                  disabled={busy || isRunning}
+                  disabled={assigneeBusy || isRunning}
                   className="shrink-0 rounded-md border border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300 transition enabled:hover:bg-indigo-500/25 disabled:opacity-40"
                 >
                   {isRunning ? "Running…" : t.status === "todo" ? "▶ Run" : "↻ Re-run"}
@@ -486,14 +580,18 @@ function TasksTab({
 
 // ---------------- activity ----------------
 
-function ActivityTab({ activities }: { activities: Activity[] }) {
+function ActivityTab({ activities, focusedId }: { activities: Activity[]; focusedId: string | null }) {
   if (activities.length === 0) {
     return <div className="mt-8 text-center text-xs text-slate-600">No activity yet.</div>;
   }
   return (
     <div className="space-y-2">
       {activities.map((a) => (
-        <div key={a.id} className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5">
+        <div
+          key={a.id}
+          data-record={`activities-${a.id}`}
+          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "activities", a.id)}`}
+        >
           <div className="flex items-start gap-2">
             <span className="text-sm">{ACTIVITY_ICON[a.type] ?? "📝"}</span>
             <div className="min-w-0 flex-1">

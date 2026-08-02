@@ -4,6 +4,7 @@ import {
   createTask,
   getContact,
   listActivities,
+  listAgents,
   listContacts,
   listDeals,
   listTasks,
@@ -12,7 +13,10 @@ import {
   updateDeal,
   updateTask,
 } from "../crm";
-import { ACTIVITY_TYPES, Agent, CONTACT_STATUSES, DEAL_STAGES, Entity, TASK_STATUSES } from "../types";
+import { ACTIVITY_TYPES, Agent, CONTACT_STATUSES, DEAL_STAGES, Entity, EntityRef, TASK_STATUSES } from "../types";
+import { journalMutation, refFor, snapshotRow } from "../mutations";
+import { createProposal } from "../proposals";
+import { nameKey } from "./mentions";
 
 // Plain JSON-schema tool definitions (Anthropic Messages API shape).
 export interface ToolDef {
@@ -26,10 +30,20 @@ export interface ToolDef {
 }
 
 interface ToolSpec {
-  entity: Entity;
+  /** null for workspace tools that aren't gated on CRM access rights. */
+  entity: Entity | null;
   level: "read" | "write";
   def: ToolDef;
   run: (input: Record<string, unknown>, agent: Agent) => unknown | Promise<unknown>;
+}
+
+export const HANDOFF_TOOL = "handoff_to_agent";
+
+/** Where a turn asked its work to go next. */
+export interface HandoffRequest {
+  agentId: number;
+  agentName: string;
+  instructions: string;
 }
 
 const num = (v: unknown): number | undefined =>
@@ -313,9 +327,46 @@ const TOOL_SPECS: ToolSpec[] = [
         result: str(input.result),
       }),
   },
+  // ---- workspace ----
+  {
+    entity: null,
+    level: "read",
+    def: {
+      name: HANDOFF_TOOL,
+      description:
+        "Hand this work to another agent in the workspace. Use it when the job needs access rights or knowledge you don't have — it is better than refusing. Pass along anything you already looked up (ids, names, values) so they don't repeat your work. Call this at most once per turn, and say in your reply that you handed off.",
+      input_schema: {
+        type: "object",
+        properties: {
+          agent_name: { type: "string", description: "Exact name of the agent to hand off to" },
+          instructions: { type: "string", description: "What you need them to do, with any ids or values you found" },
+        },
+        required: ["agent_name", "instructions"],
+      },
+    },
+    run: async (input, agent) => {
+      const roster = await listAgents();
+      const wanted = nameKey(String(input.agent_name ?? ""));
+      const target = roster.find((a) => nameKey(a.name) === wanted);
+      if (!target) {
+        throw new Error(
+          `No agent named "${input.agent_name}". Agents here: ${roster.map((a) => a.name).join(", ")}`
+        );
+      }
+      if (target.id === agent.id) throw new Error("You can't hand off to yourself.");
+      return {
+        handed_off_to: target.name,
+        agent_id: target.id,
+        instructions: String(input.instructions ?? ""),
+        note: "They will pick this up right after your reply. Tell the user you handed it to them.",
+      };
+    },
+  },
 ];
 
 function allowed(agent: Agent, spec: ToolSpec): boolean {
+  // Workspace tools (handoff) aren't tied to an entity — every agent gets them.
+  if (spec.entity === null) return true;
   const level = agent.capabilities[spec.entity];
   if (spec.level === "read") return level === "read" || level === "write";
   return level === "write";
@@ -326,27 +377,100 @@ export function toolsForAgent(agent: Agent): ToolDef[] {
   return TOOL_SPECS.filter((s) => allowed(agent, s)).map((s) => s.def);
 }
 
+/** True for tools that change CRM data — the UI refreshes the record panel on these. */
+export function isWriteTool(name: string): boolean {
+  return TOOL_SPECS.find((s) => s.def.name === name)?.level === "write";
+}
+
 const MAX_RESULT_CHARS = 6000;
 
-/** Execute one tool call on behalf of an agent, enforcing its access rights. */
+export interface ToolOutcome {
+  result: string;
+  ok: boolean;
+  /** Set when the agent asked to pass the work on. */
+  handoff?: HandoffRequest;
+  /** Records this call created or changed. */
+  refs?: EntityRef[];
+  /** Journal rows written by this call, linked to the message once it exists. */
+  mutationIds?: number[];
+  /** Writes filed for approval instead of executed. */
+  proposalIds?: number[];
+}
+
+/**
+ * Execute one tool call on behalf of an agent, enforcing its access rights.
+ *
+ * This is the single enforcement point: access rights are checked here, and
+ * "ask" agents have their writes diverted into proposals here too. Approving a
+ * proposal comes back through this same function with `skipApproval`, so the
+ * permission check is never bypassed.
+ */
 export async function executeTool(
   agent: Agent,
   name: string,
-  input: Record<string, unknown>
-): Promise<{ result: string; ok: boolean }> {
+  input: Record<string, unknown>,
+  options: { skipApproval?: boolean } = {}
+): Promise<ToolOutcome> {
   const spec = TOOL_SPECS.find((s) => s.def.name === name);
   if (!spec) return { result: `Unknown tool: ${name}`, ok: false };
   if (!allowed(agent, spec)) {
     return {
-      result: `Permission denied: ${agent.name} has "${agent.capabilities[spec.entity]}" access to ${spec.entity}, but ${name} requires "${spec.level}".`,
+      result: `Permission denied: ${agent.name} has "${agent.capabilities[spec.entity!]}" access to ${spec.entity}, but ${name} requires "${spec.level}". Consider handing this to an agent who has it.`,
       ok: false,
     };
   }
+
+  // An "ask" agent describes the write instead of making it. Note this runs
+  // only after the access check above — a proposal can't ask for more than the
+  // agent was already allowed to do.
+  if (agent.autonomy === "ask" && spec.level === "write" && spec.entity && !options.skipApproval) {
+    const proposalId = await createProposal({ agentId: agent.id, tool: name, input: input ?? {} });
+    return {
+      result: `Filed proposal #${proposalId} for approval — ${name} was NOT executed. The user will approve or reject it. Do not retry this call or try another way around it; tell the user what you proposed and move on.`,
+      ok: true,
+      proposalIds: [proposalId],
+    };
+  }
+
   try {
+    // Snapshot before the write so the journal can put the row back. Updates
+    // carry the target id in their input; creates have nothing to snapshot.
+    const targetId = spec.level === "write" && spec.entity ? num(input?.id) : undefined;
+    const before = targetId ? await snapshotRow(spec.entity!, targetId) : null;
+
     const out = await spec.run(input ?? {}, agent);
     let json = JSON.stringify(out ?? null);
     if (json.length > MAX_RESULT_CHARS) json = json.slice(0, MAX_RESULT_CHARS) + "…(truncated)";
-    return { result: json, ok: true };
+
+    const outcome: ToolOutcome = { result: json, ok: true };
+
+    if (spec.level === "write" && spec.entity) {
+      const writtenId = num((out as { id?: unknown } | null)?.id);
+      if (writtenId) {
+        const after = await snapshotRow(spec.entity, writtenId);
+        outcome.refs = [refFor(spec.entity, writtenId, after)];
+        outcome.mutationIds = [
+          await journalMutation({
+            agentId: agent.id,
+            tool: name,
+            entity: spec.entity,
+            entityId: writtenId,
+            before,
+            after,
+          }),
+        ];
+      }
+    }
+
+    if (spec.def.name === HANDOFF_TOOL) {
+      const handoff = out as { agent_id: number; handed_off_to: string; instructions: string };
+      outcome.handoff = {
+        agentId: handoff.agent_id,
+        agentName: handoff.handed_off_to,
+        instructions: handoff.instructions,
+      };
+    }
+    return outcome;
   } catch (err) {
     return { result: `Error: ${err instanceof Error ? err.message : String(err)}`, ok: false };
   }

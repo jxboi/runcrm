@@ -1,6 +1,6 @@
 "use client";
 
-import { Agent, ENTITIES } from "@/lib/types";
+import { Agent, ENTITIES, Recipient } from "@/lib/types";
 
 const ACCESS_DOT: Record<string, string> = {
   none: "bg-slate-700",
@@ -11,13 +11,15 @@ const ACCESS_DOT: Record<string, string> = {
 export default function Sidebar({
   agents,
   selectedAgentId,
+  busyAgentIds,
   onSelect,
   onNewAgent,
   onEditAgent,
 }: {
   agents: Agent[];
   selectedAgentId: number | null;
-  onSelect: (id: number) => void;
+  busyAgentIds: number[];
+  onSelect: (id: Recipient) => void;
   onNewAgent: () => void;
   onEditAgent: (agent: Agent) => void;
 }) {
@@ -68,7 +70,15 @@ export default function Sidebar({
                   {agent.emoji}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-medium text-slate-200">{agent.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-[13px] font-medium text-slate-200">{agent.name}</span>
+                    {busyAgentIds.includes(agent.id) && (
+                      <span
+                        title="Working"
+                        className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-indigo-400"
+                      />
+                    )}
+                  </div>
                   <div className="mt-0.5 flex items-center gap-1.5">
                     {ENTITIES.map((e) => (
                       <span

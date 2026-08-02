@@ -1,10 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { listAgents, listMessages } from "../crm";
 import { Agent, ENTITIES, TraceEntry } from "../types";
-import { executeTool, toolsForAgent } from "./tools";
-
-// Resolves credentials from ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / `ant auth login` profile.
-const client = new Anthropic();
+import { client } from "./client";
+import { EmitFn } from "./events";
+import { executeTool, HandoffRequest, isWriteTool, toolsForAgent } from "./tools";
 
 const MAX_ITERATIONS = 12;
 
@@ -12,11 +11,30 @@ export interface AgentTurnResult {
   text: string;
   trace: TraceEntry[];
   isError: boolean;
+  /** True when the user stopped the run — not a failure, and re-runnable. */
+  stopped: boolean;
+  /** Set when the agent handed the work to a teammate. */
+  handoff?: HandoffRequest;
+  /** Journal rows this turn wrote, to be linked to the persisted message. */
+  mutationIds: number[];
+  /** Writes this turn filed for approval instead of making. */
+  proposalIds: number[];
+}
+
+export interface RunOptions {
+  signal?: AbortSignal;
+  onEvent?: EmitFn;
 }
 
 async function buildSystemPrompt(agent: Agent): Promise<string> {
+  // Teammates' access rights are listed too, so an agent knows who to hand work to.
   const roster = (await listAgents())
-    .map((a) => `- ${a.emoji} ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""}`)
+    .map(
+      (a) =>
+        `- ${a.emoji} ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""} — ${ENTITIES.map(
+          (e) => `${e}:${a.capabilities[e]}`
+        ).join(" ")}`
+    )
     .join("\n");
   const caps = ENTITIES.map((e) => `- ${e}: ${agent.capabilities[e]}`).join("\n");
 
@@ -34,8 +52,14 @@ Rules:
 - Use your tools for anything involving CRM data. Never invent records, ids, or numbers — look them up.
 - Before creating a record, check whether it already exists.
 - After changing data, state exactly what you did (record names, ids, values).
-- If asked to do something outside your access rights, say plainly which permission you lack instead of attempting it.
-- Keep replies short and useful. Plain text only — no markdown tables or headers.
+- If asked to do something outside your access rights, say plainly which permission you lack. If a teammate above has that permission, hand the work to them with handoff_to_agent instead of just refusing — do the part you can first, then pass on the rest with what you found.
+- The user addresses agents with "@Name". If a message is addressed to someone else, stay out of it unless you were addressed too.
+- Keep replies short and useful. Plain text only — no markdown tables or headers.${
+    agent.autonomy === "ask"
+      ? `
+- You are set to ask first: your write tools file a proposal for the user instead of changing anything. When one comes back as filed, say plainly what you proposed and that it is waiting for approval. Never claim you made the change, and never retry to get around the gate. This is your setting as of now — say nothing about whether earlier messages were gated, and never retract past work on the assumption that it was.`
+      : ""
+  }
 
 Your operator instructions:
 ${agent.instructions || "(none)"}
@@ -62,16 +86,40 @@ async function buildHistory(agent: Agent): Promise<Anthropic.Beta.BetaMessagePar
 /**
  * Run one agent turn against the current chat history (the latest user message
  * must already be persisted). Executes the tool-use loop until the agent
- * produces a final text reply.
+ * produces a final text reply, emitting progress events as it goes.
+ *
+ * Text the agent produces *between* tool calls is kept and joined into the
+ * final reply, so what gets persisted matches what the user watched stream in.
  */
-export async function runAgentTurn(agent: Agent): Promise<AgentTurnResult> {
+export async function runAgentTurn(agent: Agent, opts: RunOptions = {}): Promise<AgentTurnResult> {
   const trace: TraceEntry[] = [];
+  const textParts: string[] = [];
   const tools = toolsForAgent(agent);
   const system = await buildSystemPrompt(agent);
   const messages = await buildHistory(agent);
+  const mutationIds: number[] = [];
+  const proposalIds: number[] = [];
+  let handoff: HandoffRequest | undefined;
+
+  const joined = () => textParts.join("\n\n").trim();
+  const stoppedResult = (): AgentTurnResult => ({
+    text: joined() ? `${joined()}\n\n(Stopped by you.)` : "(Stopped by you before I finished.)",
+    trace,
+    isError: false,
+    stopped: true,
+    mutationIds,
+    proposalIds,
+  });
 
   if (messages.length === 0) {
-    return { text: "There's nothing in the chat for me to respond to yet.", trace, isError: false };
+    return {
+      text: "There's nothing in the chat for me to respond to yet.",
+      trace,
+      isError: false,
+      stopped: false,
+      mutationIds,
+      proposalIds,
+    };
   }
 
   // Server-side refusal fallback is recommended for claude-opus-5; other
@@ -80,23 +128,43 @@ export async function runAgentTurn(agent: Agent): Promise<AgentTurnResult> {
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const response = await client.beta.messages.create({
-        model: agent.model,
-        max_tokens: 16000,
-        ...(isOpus5
-          ? { betas: ["server-side-fallback-2026-06-01"], fallbacks: [{ model: "claude-opus-4-8" }] }
-          : {}),
-        ...(agent.model.startsWith("claude-haiku") ? {} : { output_config: { effort: "medium" } }),
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-        tools: tools as Anthropic.Beta.BetaTool[],
-        messages,
+      if (opts.signal?.aborted) return stoppedResult();
+
+      const stream = client.beta.messages.stream(
+        {
+          model: agent.model,
+          max_tokens: 16000,
+          ...(isOpus5
+            ? { betas: ["server-side-fallback-2026-06-01"], fallbacks: [{ model: "claude-opus-4-8" }] }
+            : {}),
+          ...(agent.model.startsWith("claude-haiku") ? {} : { output_config: { effort: "medium" } }),
+          system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+          tools: tools as Anthropic.Beta.BetaTool[],
+          messages,
+        },
+        { signal: opts.signal }
+      );
+
+      // Text resumed after a round of tool calls starts a new paragraph, so the
+      // live view matches the joined text that eventually gets persisted.
+      let firstDelta = true;
+      stream.on("text", (delta) => {
+        if (firstDelta && textParts.length > 0) {
+          opts.onEvent?.({ type: "text", agentId: agent.id, delta: "\n\n" });
+        }
+        firstDelta = false;
+        opts.onEvent?.({ type: "text", agentId: agent.id, delta });
       });
+      const response = await stream.finalMessage();
 
       if (response.stop_reason === "refusal") {
         return {
           text: "I can't help with that request. (The model declined it for safety reasons.)",
           trace,
           isError: true,
+          stopped: false,
+          mutationIds,
+          proposalIds,
         };
       }
 
@@ -106,27 +174,53 @@ export async function runAgentTurn(agent: Agent): Promise<AgentTurnResult> {
         continue;
       }
 
+      const text = response.content
+        .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("\n")
+        .trim();
+      if (text) textParts.push(text);
+
       const toolUses = response.content.filter(
         (b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use"
       );
 
       if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-        const text = response.content
-          .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("\n")
-          .trim();
-        return { text: text || "(no reply)", trace, isError: false };
+        return { text: joined() || "(no reply)", trace, isError: false, stopped: false, handoff, mutationIds, proposalIds };
       }
 
       messages.push({ role: "assistant", content: response.content });
 
-      const results: Anthropic.Beta.BetaToolResultBlockParam[] = await Promise.all(toolUses.map(async (tu) => {
-        const input = (tu.input ?? {}) as Record<string, unknown>;
-        const { result, ok } = await executeTool(agent, tu.name, input);
-        trace.push({ tool: tu.name, input, result: result.slice(0, 800), ok });
-        return { type: "tool_result", tool_use_id: tu.id, content: result, is_error: !ok };
-      }));
+      const startIndex = trace.length;
+      const entries: TraceEntry[] = new Array(toolUses.length);
+      const results: Anthropic.Beta.BetaToolResultBlockParam[] = await Promise.all(
+        toolUses.map(async (tu, n) => {
+          const index = startIndex + n;
+          const input = (tu.input ?? {}) as Record<string, unknown>;
+          opts.onEvent?.({ type: "tool_start", agentId: agent.id, index, tool: tu.name, input });
+          const startedAt = Date.now();
+          const outcome = await executeTool(agent, tu.name, input);
+          const { result, ok } = outcome;
+          if (outcome.handoff) handoff = outcome.handoff;
+          if (outcome.mutationIds) mutationIds.push(...outcome.mutationIds);
+          if (outcome.proposalIds) proposalIds.push(...outcome.proposalIds);
+          const ms = Date.now() - startedAt;
+          entries[n] = { tool: tu.name, input, result: result.slice(0, 800), ok, ms, refs: outcome.refs };
+          opts.onEvent?.({
+            type: "tool_end",
+            agentId: agent.id,
+            index,
+            ok,
+            ms,
+            isWrite: isWriteTool(tu.name),
+            result: entries[n].result,
+          });
+          return { type: "tool_result", tool_use_id: tu.id, content: result, is_error: !ok };
+        })
+      );
+      trace.push(...entries);
+
+      if (opts.signal?.aborted) return stoppedResult();
 
       messages.push({ role: "user", content: results });
     }
@@ -137,9 +231,13 @@ export async function runAgentTurn(agent: Agent): Promise<AgentTurnResult> {
         .join("\n")}`,
       trace,
       isError: true,
+      stopped: false,
+      mutationIds,
+      proposalIds,
     };
   } catch (err) {
-    return { text: describeError(err), trace, isError: true };
+    if (err instanceof Anthropic.APIUserAbortError || opts.signal?.aborted) return stoppedResult();
+    return { text: describeError(err), trace, isError: true, stopped: false, mutationIds, proposalIds };
   }
 }
 

@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RunCRM",
-  description: "A chat-first CRM run by AI agents",
+  title: "RunCRM — the CRM that runs itself",
+  description:
+    "You run the relationships. RunCRM runs the record. A chat-first CRM operated by a team of AI agents whose permissions live in code, not in prompts.",
 };
 
 export default function RootLayout({
@@ -24,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="h-full overflow-hidden">{children}</body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }

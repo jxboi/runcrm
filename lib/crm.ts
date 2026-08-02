@@ -29,23 +29,25 @@ function rowToAgent(row: Record<string, unknown>): Agent {
     emoji: String(row.emoji),
     instructions: String(row.instructions),
     capabilities: caps,
+    autonomy: row.autonomy === "ask" ? "ask" : "auto",
     model: String(row.model),
     created_at: String(row.created_at),
   };
 }
 
-async function all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+// Exported for lib/mutations.ts, which journals and reverses the same rows.
+export async function all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   const db = await ensureDb();
   const result = await db.prepare(sql).bind(...(params as D1Value[])).all<T>();
   return result.results;
 }
 
-async function first<T>(sql: string, params: unknown[] = []): Promise<T | null> {
+export async function first<T>(sql: string, params: unknown[] = []): Promise<T | null> {
   const db = await ensureDb();
   return db.prepare(sql).bind(...(params as D1Value[])).first<T>();
 }
 
-async function run(sql: string, params: unknown[] = []) {
+export async function run(sql: string, params: unknown[] = []) {
   const db = await ensureDb();
   return db.prepare(sql).bind(...(params as D1Value[])).run();
 }
@@ -60,7 +62,7 @@ export async function getAgent(id: number): Promise<Agent | null> {
 }
 
 export async function createAgent(input: {
-  name: string; emoji?: string; instructions?: string; capabilities?: Partial<Capabilities>; model?: string;
+  name: string; emoji?: string; instructions?: string; capabilities?: Partial<Capabilities>; autonomy?: string; model?: string;
 }): Promise<Agent> {
   const caps: Capabilities = { contacts: "none", deals: "none", activities: "none", tasks: "none" };
   for (const e of ENTITIES) {
@@ -68,14 +70,14 @@ export async function createAgent(input: {
     if (value === "read" || value === "write") caps[e] = value;
   }
   const result = await run(
-    "INSERT INTO agents (name, emoji, instructions, capabilities, model) VALUES (?, ?, ?, ?, ?)",
-    [input.name.trim(), input.emoji?.trim() || "🤖", input.instructions ?? "", JSON.stringify(caps), input.model || "claude-opus-5"],
+    "INSERT INTO agents (name, emoji, instructions, capabilities, autonomy, model) VALUES (?, ?, ?, ?, ?, ?)",
+    [input.name.trim(), input.emoji?.trim() || "🤖", input.instructions ?? "", JSON.stringify(caps), input.autonomy === "ask" ? "ask" : "auto", input.model || "claude-opus-5"],
   );
   return (await getAgent(Number(result.meta.last_row_id)))!;
 }
 
 export async function updateAgent(id: number, input: {
-  name?: string; emoji?: string; instructions?: string; capabilities?: Partial<Capabilities>; model?: string;
+  name?: string; emoji?: string; instructions?: string; capabilities?: Partial<Capabilities>; autonomy?: string; model?: string;
 }): Promise<Agent | null> {
   const existing = await getAgent(id);
   if (!existing) return null;
@@ -84,11 +86,13 @@ export async function updateAgent(id: number, input: {
     const value = input.capabilities?.[e];
     if (value === "none" || value === "read" || value === "write") caps[e] = value;
   }
-  await run("UPDATE agents SET name = ?, emoji = ?, instructions = ?, capabilities = ?, model = ? WHERE id = ?", [
+  const autonomy = input.autonomy === "ask" || input.autonomy === "auto" ? input.autonomy : existing.autonomy;
+  await run("UPDATE agents SET name = ?, emoji = ?, instructions = ?, capabilities = ?, autonomy = ?, model = ? WHERE id = ?", [
     (input.name ?? existing.name).trim(),
     (input.emoji ?? existing.emoji).trim() || "🤖",
     input.instructions ?? existing.instructions,
     JSON.stringify(caps),
+    autonomy,
     input.model ?? existing.model,
     id,
   ]);
@@ -249,9 +253,12 @@ export async function updateTask(id: number, input: Partial<Pick<Task, "title" |
   return (await getTask(id))!;
 }
 
-export async function listMessages(limit = 200): Promise<ChatMessage[]> {
-  const rows = await all<Record<string, unknown>>(`SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji FROM messages m LEFT JOIN agents a ON a.id = m.agent_id ORDER BY m.id DESC LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
-  return rows.reverse().map((row) => ({
+/** Counts the writes still standing behind a message, i.e. what Undo would reverse. */
+const UNDOABLE_COUNT =
+  "(SELECT COUNT(*) FROM mutations mu WHERE mu.message_id = m.id AND mu.undone_at IS NULL) AS undoable";
+
+function rowToMessage(row: Record<string, unknown>): ChatMessage {
+  return {
     id: Number(row.id),
     role: row.role as "user" | "agent",
     agent_id: row.agent_id == null ? null : Number(row.agent_id),
@@ -260,8 +267,14 @@ export async function listMessages(limit = 200): Promise<ChatMessage[]> {
     content: String(row.content),
     trace: safeParseTrace(row.trace),
     is_error: Boolean(row.is_error),
+    undoable: Number(row.undoable ?? 0),
     created_at: String(row.created_at),
-  }));
+  };
+}
+
+export async function listMessages(limit = 200): Promise<ChatMessage[]> {
+  const rows = await all<Record<string, unknown>>(`SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji, ${UNDOABLE_COUNT} FROM messages m LEFT JOIN agents a ON a.id = m.agent_id ORDER BY m.id DESC LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
+  return rows.reverse().map(rowToMessage);
 }
 
 function safeParseTrace(raw: unknown): TraceEntry[] {
@@ -274,10 +287,12 @@ export async function insertMessage(input: {
   const result = await run("INSERT INTO messages (role, agent_id, content, trace, is_error) VALUES (?, ?, ?, ?, ?)", [
     input.role, input.agent_id ?? null, input.content, JSON.stringify(input.trace ?? []), input.is_error ? 1 : 0,
   ]);
-  const row = await first<Record<string, unknown>>("SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji FROM messages m LEFT JOIN agents a ON a.id = m.agent_id WHERE m.id = ?", [result.meta.last_row_id]);
-  return {
-    id: Number(row!.id), role: row!.role as "user" | "agent", agent_id: row!.agent_id == null ? null : Number(row!.agent_id),
-    agent_name: (row!.agent_name as string) ?? null, agent_emoji: (row!.agent_emoji as string) ?? null,
-    content: String(row!.content), trace: safeParseTrace(row!.trace), is_error: Boolean(row!.is_error), created_at: String(row!.created_at),
-  };
+  const row = await first<Record<string, unknown>>(`SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji, ${UNDOABLE_COUNT} FROM messages m LEFT JOIN agents a ON a.id = m.agent_id WHERE m.id = ?`, [result.meta.last_row_id]);
+  return rowToMessage(row!);
+}
+
+/** Re-read one message, e.g. after an undo changed what it still has standing. */
+export async function getMessage(id: number): Promise<ChatMessage | null> {
+  const row = await first<Record<string, unknown>>(`SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji, ${UNDOABLE_COUNT} FROM messages m LEFT JOIN agents a ON a.id = m.agent_id WHERE m.id = ?`, [id]);
+  return row ? rowToMessage(row) : null;
 }

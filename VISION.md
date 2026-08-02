@@ -10,23 +10,7 @@ RunCRM inverts this. The human does the part that requires a human: judgment, ta
 
 ---
 
-## A Monday in the perfect app
-
-*8:47am. You open RunCRM to the workspace chat.*
-
-*Overnight: a lead came in from the website. The Researcher enriched it, caught that "J. Park — Oakbridge Capital" is the same James Park already in the book, merged the records instead of duplicating them, and left a two-line dossier. The Analyst posted the weekly brief at 8:00 sharp: pipeline up 4%, but the HelixSoft deal hasn't moved in 19 days and the champion went quiet — flagged. The Renewals Watchdog noticed Acme's contract hits the 45-day window on Thursday and spun up the standard chain: usage summary requested from the Analyst, draft renewal email parked in your Approvals, calendar hold proposed for Maya Chen.*
-
-*Your morning is three approvals, not thirty updates. You approve one draft as-is, sharpen the second's opening line, and tell the room:*
-
-> "Northwind asked to revisit in Q1 — budget season. Park it."
-
-*Behind that one sentence: stage moved, close date pushed to January, note logged with your phrasing, a follow-up task scheduled for Jan 6, the forecast quietly rebalanced. Every change carries a receipt. By 9:02 you're doing the only thing on your calendar that matters: talking to a customer.*
-
----
-
-## What the perfect app is
-
-### 1. Agents are teammates, not features
+## 1. Agents are teammates, not features
 
 You don't configure automations. You **hire**. An agent is a colleague with a name, a job description (instructions), a badge (access rights), a toolbox (connectors), a memory, and a track record. You brief them, correct them, promote them, and — when a role changes — offboard them.
 
@@ -41,7 +25,7 @@ One set of primitives composes every role. Instructions + capabilities + access 
 
 The product ships primitives. Users compose teammates.
 
-Teammates remember. Tell the Analyst once to report in EUR and it never asks again. Correct the Assistant's tone once and the correction sticks. Each account accumulates a dossier — history, preferences, landmines — that any agent consults before acting and any new human reads to onboard.
+Teammates remember. Tell the Analyst once to report in USD and it never asks again. Correct the Assistant's tone once and the correction sticks. Each account accumulates a dossier — history, preferences, landmines — that any agent consults before acting and any new human reads to onboard.
 
 And teammates collaborate in the open: the Coordinator delegates, the Assistant hands a stuck negotiation to you, the Analyst reviews the Watchdog's numbers before they ship. Agent-to-agent work happens in the same visible room as everything else.
 
@@ -52,7 +36,7 @@ v0.1's core design decision scales all the way up: **access rights live in code,
 The perfect app grows this from entity-level read/write into an **autonomy ladder**, granted per agent, per capability:
 
 | Level | The agent may… | Example |
-|---|---|---|
+| --- | --- | --- |
 | Observer | read and report | Analyst answering "what's stuck?" |
 | Advisor | propose changes as diffs | Janitor's Friday fix-it list |
 | Operator (gated) | act after your one-tap approval | sending any email to a customer |
@@ -71,7 +55,7 @@ But chat-first is not chat-only. The record panel stays one glance away — beca
 
 ### 4. Proactive by default
 
-A CRM that only answers is still a database. The perfect app **notices**:
+A CRM that only answers is still a database. RunCRM **notices**:
 
 - **Routines** — the Monday brief, the Friday hygiene sweep, month-end forecast prep — run on schedules, not on asks.
 - **Watchdogs** — deal stalled 14 days, champion gone quiet, renewal window opening, two agents about to write conflicting facts — fire on conditions.
@@ -105,11 +89,9 @@ Every agent write is a journaled mutation: who, why, triggered by what, part of 
 
 ## What we refuse to build
 
-- **A spam cannon.** Scaled unsolicited outreach is off the roadmap at any price point.
 - **Black-box automation.** If we can't show the trace, we don't ship the action.
 - **Dashboard theater.** Charts exist to trigger decisions, not to be admired in standups.
 - **A second inbox that nags.** RunCRM consolidates attention; it doesn't tax it.
-- **A human-replacement pitch.** The point of agents doing the bookkeeping is more human time with humans.
 
 ## How we'll know it's working
 

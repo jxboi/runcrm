@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AccessLevel, Agent, Capabilities, ENTITIES } from "@/lib/types";
+import { AccessLevel, Agent, Autonomy, Capabilities, ENTITIES } from "@/lib/types";
 
 const EMOJI_PICKS = ["🤖", "💼", "📊", "🧠", "⚡", "🔍", "📣", "🛠️", "🧾", "🌱"];
 
@@ -31,6 +31,7 @@ export default function AgentModal({
   const [caps, setCaps] = useState<Capabilities>(
     agent?.capabilities ?? { contacts: "read", deals: "read", activities: "read", tasks: "read" }
   );
+  const [autonomy, setAutonomy] = useState<Autonomy>(agent?.autonomy ?? "auto");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +43,7 @@ export default function AgentModal({
     setSaving(true);
     setError(null);
     try {
-      await onSave({ name, emoji, model, instructions, capabilities: caps }, agent?.id);
+      await onSave({ name, emoji, model, instructions, capabilities: caps, autonomy }, agent?.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save");
       setSaving(false);
@@ -156,6 +157,37 @@ export default function AgentModal({
             <p className="mt-1 text-[10px] text-slate-600">
               read = list &amp; look up · write = also create, update, and log
             </p>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-medium text-slate-400">Writes</label>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              {(
+                [
+                  { value: "auto", title: "Go ahead", blurb: "Writes apply immediately. Still undoable." },
+                  { value: "ask", title: "Ask me first", blurb: "Writes wait for your approval in chat." },
+                ] as { value: Autonomy; title: string; blurb: string }[]
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setAutonomy(option.value)}
+                  className={`rounded-lg border px-3 py-2 text-left transition ${
+                    autonomy === option.value
+                      ? "border-indigo-500/60 bg-indigo-500/10"
+                      : "border-slate-700 hover:border-slate-500"
+                  }`}
+                >
+                  <div
+                    className={`text-xs font-medium ${
+                      autonomy === option.value ? "text-indigo-200" : "text-slate-300"
+                    }`}
+                  >
+                    {option.title}
+                  </div>
+                  <div className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{option.blurb}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           {error && <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">{error}</div>}

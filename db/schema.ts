@@ -7,6 +7,7 @@ export const agents = sqliteTable("agents", {
   emoji: text("emoji").notNull().default("🤖"),
   instructions: text("instructions").notNull().default(""),
   capabilities: text("capabilities").notNull().default("{}"),
+  autonomy: text("autonomy").notNull().default("auto"),
   model: text("model").notNull().default("claude-opus-5"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 });
@@ -48,3 +49,25 @@ export const messages = sqliteTable("messages", {
   trace: text("trace").notNull().default("[]"), isError: integer("is_error").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 }, (table) => [index("idx_messages_agent_id").on(table.agentId)]);
+
+/** Journal of every agent write, so any change can be explained and undone. */
+export const mutations = sqliteTable("mutations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  messageId: integer("message_id").references(() => messages.id, { onDelete: "set null" }),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  tool: text("tool").notNull(), entity: text("entity").notNull(), entityId: integer("entity_id").notNull(),
+  before: text("before"), after: text("after"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  undoneAt: text("undone_at"),
+}, (table) => [index("idx_mutations_message_id").on(table.messageId)]);
+
+/** Writes an "ask" agent wants to make, held until the user decides. */
+export const proposals = sqliteTable("proposals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  messageId: integer("message_id").references(() => messages.id, { onDelete: "set null" }),
+  tool: text("tool").notNull(), input: text("input").notNull().default("{}"),
+  status: text("status").notNull().default("pending"), result: text("result"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  decidedAt: text("decided_at"),
+}, (table) => [index("idx_proposals_status").on(table.status)]);

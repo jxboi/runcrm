@@ -59,7 +59,34 @@ const schemaStatements = [
     is_error INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
+  // Writes an "ask" agent wants to make, held until the user decides.
+  `CREATE TABLE IF NOT EXISTS proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    tool TEXT NOT NULL,
+    input TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    result TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT
+  )`,
+  // Journal of every agent write, so any change can be explained and undone.
+  `CREATE TABLE IF NOT EXISTS mutations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    tool TEXT NOT NULL,
+    entity TEXT NOT NULL,
+    entity_id INTEGER NOT NULL,
+    before TEXT,
+    after TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    undone_at TEXT
+  )`,
   "CREATE INDEX IF NOT EXISTS idx_contacts_updated_at ON contacts(updated_at)",
+  "CREATE INDEX IF NOT EXISTS idx_mutations_message_id ON mutations(message_id)",
+  "CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status)",
   "CREATE INDEX IF NOT EXISTS idx_deals_updated_at ON deals(updated_at)",
   "CREATE INDEX IF NOT EXISTS idx_activities_contact_id ON activities(contact_id)",
   "CREATE INDEX IF NOT EXISTS idx_activities_deal_id ON activities(deal_id)",
@@ -81,9 +108,26 @@ export function ensureDb(): Promise<D1Database> {
   return ready;
 }
 
+/**
+ * Columns added after v0.1. `CREATE TABLE IF NOT EXISTS` leaves existing tables
+ * untouched, so new columns need an explicit ALTER on databases already in use.
+ */
+const addedColumns: { table: string; column: string; definition: string }[] = [
+  { table: "agents", column: "autonomy", definition: "TEXT NOT NULL DEFAULT 'auto'" },
+];
+
+async function applyColumnMigrations(db: D1Database) {
+  for (const { table, column, definition } of addedColumns) {
+    const info = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    if (info.results.some((c: { name: string }) => c.name === column)) continue;
+    await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  }
+}
+
 async function initializeDb(): Promise<D1Database> {
   const db = getDb();
   await db.batch(schemaStatements.map((sql) => db.prepare(sql)));
+  await applyColumnMigrations(db);
 
   const count = await db.prepare("SELECT COUNT(*) AS n FROM agents").first<{ n: number }>();
   if (!count?.n) await seed(db);

@@ -43,3 +43,103 @@ details > summary {
 details > summary::-webkit-details-marker {
   display: none;
 }
+
+/* ---------------------------------------------------------------- landing */
+/* Prefixed `rc-` so nothing here can leak into the workspace app's styles. */
+
+@keyframes rc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rc-reveal {
+  opacity: 0;
+}
+
+.rc-reveal.rc-in {
+  animation: rc-fade-up 0.75s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+/* Slow-drifting aurora behind the hero. */
+@keyframes rc-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, -3%, 0) scale(1.12);
+  }
+}
+
+.rc-aurora {
+  animation: rc-drift 22s ease-in-out infinite;
+}
+
+/* Blueprint grid, faded out toward the edges. */
+.rc-grid {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* The journal ticker duplicates its children, so -50% is one seamless lap. */
+@keyframes rc-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.rc-marquee {
+  animation: rc-marquee 46s linear infinite;
+}
+
+@keyframes rc-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.rc-caret {
+  animation: rc-caret 1.1s step-end infinite;
+}
+
+/* A record the agent just touched flashes, then settles. */
+@keyframes rc-flash {
+  0% {
+    background-color: rgba(99, 102, 241, 0.28);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.rc-flash {
+  animation: rc-flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rc-reveal {
+    opacity: 1;
+  }
+
+  .rc-reveal.rc-in,
+  .rc-aurora,
+  .rc-marquee,
+  .rc-caret,
+  .rc-flash {
+    animation: none;
+  }
+}
