@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { insertMessage, listMessages } from "@/lib/crm";
+import { getThread, insertMessage, listMessages } from "@/lib/crm";
 import { TraceEntry } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return NextResponse.json(await listMessages());
+export async function GET(req: NextRequest) {
+  const threadId = Number(req.nextUrl.searchParams.get("threadId") ?? 1);
+  if (!Number.isInteger(threadId) || threadId < 1 || !(await getThread(threadId))) {
+    return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+  }
+  return NextResponse.json(await listMessages(200, threadId));
 }
 
 /**
@@ -20,6 +24,7 @@ export async function POST(req: NextRequest) {
     content?: string;
     trace?: TraceEntry[];
     is_error?: boolean;
+    thread_id?: number;
   };
   try {
     body = await req.json();
@@ -32,10 +37,15 @@ export async function POST(req: NextRequest) {
   if (body.role !== "user" && body.role !== "agent") {
     return NextResponse.json({ error: 'role must be "user" or "agent"' }, { status: 400 });
   }
+  const threadId = Number(body.thread_id ?? 1);
+  if (!Number.isInteger(threadId) || threadId < 1 || !(await getThread(threadId))) {
+    return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+  }
 
   return NextResponse.json(
     await insertMessage({
       role: body.role,
+      thread_id: threadId,
       agent_id: body.agent_id ?? null,
       content,
       trace: Array.isArray(body.trace) ? body.trace : [],

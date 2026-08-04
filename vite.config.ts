@@ -10,6 +10,7 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  triggers: { crons: ["*/5 * * * *"] },
   d1_databases: d1
     ? [{ binding: d1, database_name: "runcrm-d1", database_id: placeholderDatabaseId }]
     : [],

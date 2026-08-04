@@ -1,5 +1,6 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { runDueRoutines } from "../lib/routine-scheduler";
 
 interface Env {
   ASSETS: Fetcher;
@@ -18,6 +19,12 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+interface ScheduledController {
+  scheduledTime: number;
+  cron: string;
+  noRetry(): void;
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -31,6 +38,9 @@ const worker = {
       }, [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES]);
     }
     return handler.fetch(request, env, ctx);
+  },
+  async scheduled(controller: ScheduledController, _env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runDueRoutines(controller.scheduledTime));
   },
 };
 

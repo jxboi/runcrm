@@ -40,6 +40,7 @@ export interface Proposal {
   agent_name?: string | null;
   agent_emoji?: string | null;
   message_id: number | null;
+  thread_id: number | null;
   tool: string;
   input: Record<string, unknown>;
   status: ProposalStatus;
@@ -109,6 +110,61 @@ export interface Task {
   updated_at: string;
 }
 
+export type RoutineSchedule =
+  | { kind: "daily"; time: string }
+  | { kind: "weekly"; weekdays: number[]; time: string }
+  | { kind: "monthly"; day: number; time: string };
+
+export type RoutineRunStatus = "running" | "succeeded" | "failed";
+export type RoutineRunTrigger = "scheduled" | "manual" | "retry";
+
+export interface Routine {
+  id: number;
+  name: string;
+  instructions: string;
+  agent_id: number | null;
+  agent_name?: string | null;
+  agent_emoji?: string | null;
+  schedule: RoutineSchedule;
+  enabled: boolean;
+  archived_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoutineRun {
+  id: number;
+  routine_id: number | null;
+  routine_name?: string | null;
+  trigger: RoutineRunTrigger;
+  scheduled_for: string | null;
+  status: RoutineRunStatus;
+  result: string | null;
+  error: string | null;
+  trigger_message_id: number | null;
+  retried_from_run_id: number | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface WorkspaceSettings {
+  timezone: string;
+  updated_at: string;
+}
+
+/** A durable conversation. Thread 1 is the workspace-wide Home room. */
+export interface ChatThread {
+  id: number;
+  title: string;
+  account_name: string | null;
+  message_count: number;
+  last_message: string | null;
+  last_message_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** A CRM record a tool call touched, so the UI can point at it. */
 export interface EntityRef {
   entity: Entity;
@@ -141,6 +197,8 @@ export interface LiveStep {
 export interface LiveRun {
   /** Identifies the request this turn belongs to; one request may run several agents. */
   runKey: string;
+  /** Keeps background work attached to the conversation where it started. */
+  threadId: number;
   agentId: number;
   agentName: string;
   agentEmoji: string;
@@ -151,6 +209,7 @@ export interface LiveRun {
 /** Ephemeral "routed to X" / "X handed off to Y" line shown while a run is live. */
 export interface RunNotice {
   id: string;
+  threadId: number;
   text: string;
 }
 
@@ -159,6 +218,7 @@ export type Recipient = number | "auto";
 
 export interface ChatMessage {
   id: number;
+  thread_id: number;
   role: "user" | "agent";
   agent_id: number | null;
   agent_name?: string | null;

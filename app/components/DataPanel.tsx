@@ -13,8 +13,9 @@ import {
   Task,
 } from "@/lib/types";
 import { api, fmtMoney, fmtTime } from "@/lib/client";
+import RoutinesTab from "./RoutinesTab";
 
-type Tab = "contacts" | "deals" | "tasks" | "activity";
+type Tab = "contacts" | "deals" | "tasks" | "routines" | "activity";
 
 /** Entity names from a trace ref map onto the panel's tabs. */
 const TAB_FOR_ENTITY: Record<Entity, Tab> = {
@@ -104,6 +105,8 @@ export default function DataPanel({
   busyAgentIds,
   focusRef,
   onRunTask,
+  onRunRoutine,
+  onOpenAccountThread,
   onError,
 }: {
   agents: Agent[];
@@ -111,6 +114,8 @@ export default function DataPanel({
   busyAgentIds: number[];
   focusRef: EntityRef | null;
   onRunTask: (taskId: number, assigneeId: number | null) => Promise<void>;
+  onRunRoutine: (routineId: number, retryRunId?: number) => Promise<void>;
+  onOpenAccountThread: (accountName: string) => Promise<void>;
   onError: (msg: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("contacts");
@@ -119,6 +124,7 @@ export default function DataPanel({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [runningTaskId, setRunningTaskId] = useState<number | null>(null);
+  const [routineCount, setRoutineCount] = useState(0);
   const { focusedId, containerRef } = useFocusedRecord(focusRef, setTab);
 
   const reload = useCallback(async () => {
@@ -139,7 +145,8 @@ export default function DataPanel({
   }, [onError]);
 
   useEffect(() => {
-    reload();
+    const timer = window.setTimeout(reload, 0);
+    return () => window.clearTimeout(timer);
   }, [version, reload]);
 
   const runTask = async (task: Task) => {
@@ -156,17 +163,18 @@ export default function DataPanel({
     { id: "contacts", label: "Contacts", count: contacts.length },
     { id: "deals", label: "Deals", count: deals.length },
     { id: "tasks", label: "Tasks", count: tasks.filter((t) => t.status === "todo" || t.status === "running").length },
+    { id: "routines", label: "Routines", count: routineCount },
     { id: "activity", label: "Activity", count: activities.length },
   ];
 
   return (
-    <aside className="hidden w-[400px] shrink-0 flex-col bg-slate-950 lg:flex">
+    <aside className="hidden w-[400px] shrink-0 flex-col overflow-x-hidden bg-slate-950 lg:flex">
       <div className="flex h-14 shrink-0 items-center gap-1 border-b border-slate-800/70 px-3">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+            className={`rounded-lg px-2 py-1.5 text-[11px] font-medium transition ${
               tab === t.id ? "bg-slate-800 text-slate-100" : "text-slate-500 hover:text-slate-300"
             }`}
           >
@@ -178,7 +186,13 @@ export default function DataPanel({
 
       <div ref={containerRef} className="flex-1 overflow-y-auto p-3">
         {tab === "contacts" && (
-          <ContactsTab contacts={contacts} focusedId={focusedId} onCreated={reload} onError={onError} />
+          <ContactsTab
+            contacts={contacts}
+            focusedId={focusedId}
+            onCreated={reload}
+            onOpenAccountThread={onOpenAccountThread}
+            onError={onError}
+          />
         )}
         {tab === "deals" && (
           <DealsTab
@@ -201,6 +215,16 @@ export default function DataPanel({
             onError={onError}
           />
         )}
+        {tab === "routines" && (
+          <RoutinesTab
+            agents={agents}
+            busyAgentIds={busyAgentIds}
+            version={version}
+            onRun={onRunRoutine}
+            onCount={setRoutineCount}
+            onError={onError}
+          />
+        )}
         {tab === "activity" && <ActivityTab activities={activities} focusedId={focusedId} />}
       </div>
     </aside>
@@ -213,11 +237,13 @@ function ContactsTab({
   contacts,
   focusedId,
   onCreated,
+  onOpenAccountThread,
   onError,
 }: {
   contacts: Contact[];
   focusedId: string | null;
   onCreated: () => void;
+  onOpenAccountThread: (accountName: string) => Promise<void>;
   onError: (m: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
@@ -300,7 +326,17 @@ function ContactsTab({
                 {c.email ? ` · ${c.email}` : ""}
               </div>
             </div>
-            <Pill text={c.status} map={STATUS_PILL} />
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                onClick={() => void onOpenAccountThread(c.company ?? c.name)}
+                title={`Open ${c.company ?? c.name} conversation`}
+                aria-label={`Open ${c.company ?? c.name} conversation`}
+                className="rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-500 transition hover:border-indigo-500/50 hover:text-indigo-300"
+              >
+                💬
+              </button>
+              <Pill text={c.status} map={STATUS_PILL} />
+            </div>
           </div>
           {c.notes && <div className="mt-1.5 truncate text-[11px] italic text-slate-600">{c.notes}</div>}
         </div>

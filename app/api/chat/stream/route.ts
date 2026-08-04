@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAgent, insertMessage, listAgents } from "@/lib/crm";
+import { getAgent, getThread, insertMessage, listAgents } from "@/lib/crm";
 import { runChain } from "@/lib/agent/chain";
 import { sseResponse } from "@/lib/agent/events";
 import { parseMentions } from "@/lib/agent/mentions";
@@ -21,7 +21,7 @@ export const maxDuration = 300;
  * persisted here, because the client saves the partial it already has.
  */
 export async function POST(req: NextRequest) {
-  let body: { content?: string; agentId?: number | "auto" | null };
+  let body: { content?: string; agentId?: number | "auto" | null; threadId?: number };
   try {
     body = await req.json();
   } catch {
@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
 
   const content = body.content?.trim();
   if (!content) return NextResponse.json({ error: "Message content is required" }, { status: 400 });
+  const threadId = Number(body.threadId ?? 1);
+  const thread = Number.isInteger(threadId) && threadId > 0 ? await getThread(threadId) : null;
+  if (!thread) return NextResponse.json({ error: "Thread not found" }, { status: 404 });
 
   const agents = await listAgents();
   if (agents.length === 0) {
@@ -44,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   return sseResponse(req, async (emit, signal) => {
-    const userMessage = await insertMessage({ role: "user", content });
+    const userMessage = await insertMessage({ role: "user", thread_id: threadId, content });
     emit({ type: "user_message", message: userMessage });
 
     let queue: Agent[];
@@ -58,6 +61,6 @@ export async function POST(req: NextRequest) {
       queue = [picked];
     }
 
-    await runChain(queue, emit, signal);
+    await runChain(queue, emit, signal, thread);
   });
 }

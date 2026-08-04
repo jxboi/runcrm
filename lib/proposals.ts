@@ -21,6 +21,7 @@ function rowToProposal(row: Record<string, unknown>): Proposal {
     agent_name: (row.agent_name as string) ?? null,
     agent_emoji: (row.agent_emoji as string) ?? null,
     message_id: row.message_id == null ? null : Number(row.message_id),
+    thread_id: row.thread_id == null ? null : Number(row.thread_id),
     tool: String(row.tool),
     input,
     status: row.status as ProposalStatus,
@@ -31,7 +32,7 @@ function rowToProposal(row: Record<string, unknown>): Proposal {
 }
 
 const SELECT =
-  "SELECT p.*, a.name AS agent_name, a.emoji AS agent_emoji FROM proposals p LEFT JOIN agents a ON a.id = p.agent_id";
+  "SELECT p.*, a.name AS agent_name, a.emoji AS agent_emoji, m.thread_id FROM proposals p LEFT JOIN agents a ON a.id = p.agent_id LEFT JOIN messages m ON m.id = p.message_id";
 
 export async function createProposal(input: {
   agentId: number;

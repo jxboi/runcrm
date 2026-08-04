@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const agents = sqliteTable("agents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -43,12 +43,21 @@ export const tasks = sqliteTable("tasks", {
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 }, (table) => [index("idx_tasks_status").on(table.status)]);
 
+export const threads = sqliteTable("threads", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  accountName: text("account_name").unique(),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+});
+
 export const messages = sqliteTable("messages", {
   id: integer("id").primaryKey({ autoIncrement: true }), role: text("role").notNull(),
+  threadId: integer("thread_id").notNull().default(1).references(() => threads.id),
   agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }), content: text("content").notNull(),
   trace: text("trace").notNull().default("[]"), isError: integer("is_error").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-}, (table) => [index("idx_messages_agent_id").on(table.agentId)]);
+}, (table) => [index("idx_messages_agent_id").on(table.agentId), index("idx_messages_thread_id").on(table.threadId, table.id)]);
 
 /** Journal of every agent write, so any change can be explained and undone. */
 export const mutations = sqliteTable("mutations", {
@@ -71,3 +80,42 @@ export const proposals = sqliteTable("proposals", {
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   decidedAt: text("decided_at"),
 }, (table) => [index("idx_proposals_status").on(table.status)]);
+
+export const workspaceSettings = sqliteTable("workspace_settings", {
+  id: integer("id").primaryKey(),
+  timezone: text("timezone").notNull().default("UTC"),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+});
+
+export const routines = sqliteTable("routines", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  instructions: text("instructions").notNull(),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  schedule: text("schedule").notNull(),
+  enabled: integer("enabled").notNull().default(1),
+  archivedAt: text("archived_at"),
+  nextRunAt: text("next_run_at"),
+  lockToken: text("lock_token"),
+  lockedAt: text("locked_at"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+}, (table) => [index("idx_routines_due").on(table.enabled, table.archivedAt, table.nextRunAt)]);
+
+export const routineRuns = sqliteTable("routine_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  routineId: integer("routine_id").references(() => routines.id, { onDelete: "set null" }),
+  runKey: text("run_key").notNull(),
+  trigger: text("trigger").notNull(),
+  scheduledFor: text("scheduled_for"),
+  status: text("status").notNull().default("running"),
+  result: text("result"),
+  error: text("error"),
+  triggerMessageId: integer("trigger_message_id").references(() => messages.id, { onDelete: "set null" }),
+  retriedFromRunId: integer("retried_from_run_id"),
+  startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
+  completedAt: text("completed_at"),
+}, (table) => [
+  uniqueIndex("idx_routine_runs_key").on(table.runKey),
+  index("idx_routine_runs_routine").on(table.routineId, table.startedAt),
+]);

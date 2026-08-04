@@ -11,10 +11,12 @@
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "lint": "eslint",
+    "test": "vitest run",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@js-temporal/polyfill": "^0.5.1",
     "drizzle-orm": "0.45.2",
     "next": "16.2.6",
     "react": "19.2.6",
@@ -36,6 +38,7 @@
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.0.13",
+    "vitest": "^4.1.10",
     "wrangler": "4.92.0"
   }
 }

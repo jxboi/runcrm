@@ -1,7 +1,7 @@
 import { getAgent, insertMessage } from "../crm";
 import { linkMutationsToMessage } from "../mutations";
 import { linkProposalsToMessage, listProposalsForMessage } from "../proposals";
-import { Agent } from "../types";
+import { Agent, ChatThread } from "../types";
 import { EmitFn } from "./events";
 import { runAgentTurn } from "./runner";
 
@@ -24,7 +24,8 @@ export interface ChainOutcome {
 export async function runChain(
   queue: Agent[],
   emit: EmitFn,
-  signal: AbortSignal
+  signal: AbortSignal,
+  thread: ChatThread
 ): Promise<ChainOutcome> {
   const answered = new Set(queue.map((a) => a.id));
   const pending = [...queue];
@@ -35,11 +36,12 @@ export async function runChain(
     const agent = pending.shift()!;
     emit({ type: "agent_start", agentId: agent.id, agentName: agent.name, agentEmoji: agent.emoji });
 
-    const result = await runAgentTurn(agent, { signal, onEvent: emit });
+    const result = await runAgentTurn(agent, { signal, onEvent: emit, thread });
     if (signal.aborted) return outcome;
 
     const message = await insertMessage({
       role: "agent",
+      thread_id: thread.id,
       agent_id: agent.id,
       content: result.text,
       trace: result.trace,
@@ -70,6 +72,7 @@ export async function runChain(
     // the target picks it up from history and the user can see the handoff.
     const note = await insertMessage({
       role: "agent",
+      thread_id: thread.id,
       agent_id: agent.id,
       content: `→ @${target.name}: ${next.instructions}`,
     });

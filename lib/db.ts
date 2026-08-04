@@ -50,8 +50,17 @@ const schemaStatements = [
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
+  `CREATE TABLE IF NOT EXISTS threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    account_name TEXT COLLATE NOCASE UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  "INSERT OR IGNORE INTO threads (id, title, account_name) VALUES (1, 'Home', NULL)",
   `CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL DEFAULT 1 REFERENCES threads(id),
     role TEXT NOT NULL,
     agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
@@ -84,6 +93,39 @@ const schemaStatements = [
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     undone_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS workspace_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS routines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    instructions TEXT NOT NULL,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    schedule TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    archived_at TEXT,
+    next_run_at TEXT,
+    lock_token TEXT,
+    locked_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS routine_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    routine_id INTEGER REFERENCES routines(id) ON DELETE SET NULL,
+    run_key TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    scheduled_for TEXT,
+    status TEXT NOT NULL DEFAULT 'running',
+    result TEXT,
+    error TEXT,
+    trigger_message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    retried_from_run_id INTEGER,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  )`,
   "CREATE INDEX IF NOT EXISTS idx_contacts_updated_at ON contacts(updated_at)",
   "CREATE INDEX IF NOT EXISTS idx_mutations_message_id ON mutations(message_id)",
   "CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status)",
@@ -92,6 +134,9 @@ const schemaStatements = [
   "CREATE INDEX IF NOT EXISTS idx_activities_deal_id ON activities(deal_id)",
   "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
   "CREATE INDEX IF NOT EXISTS idx_messages_agent_id ON messages(agent_id)",
+  "CREATE INDEX IF NOT EXISTS idx_routines_due ON routines(enabled, archived_at, next_run_at)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_routine_runs_key ON routine_runs(run_key)",
+  "CREATE INDEX IF NOT EXISTS idx_routine_runs_routine ON routine_runs(routine_id, started_at)",
 ] as const;
 
 let ready: Promise<D1Database> | undefined;
@@ -114,6 +159,7 @@ export function ensureDb(): Promise<D1Database> {
  */
 const addedColumns: { table: string; column: string; definition: string }[] = [
   { table: "agents", column: "autonomy", definition: "TEXT NOT NULL DEFAULT 'auto'" },
+  { table: "messages", column: "thread_id", definition: "INTEGER NOT NULL DEFAULT 1" },
 ];
 
 async function applyColumnMigrations(db: D1Database) {
@@ -128,6 +174,8 @@ async function initializeDb(): Promise<D1Database> {
   const db = getDb();
   await db.batch(schemaStatements.map((sql) => db.prepare(sql)));
   await applyColumnMigrations(db);
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id, id)").run();
+  await db.prepare("INSERT OR IGNORE INTO workspace_settings (id, timezone) VALUES (1, 'UTC')").run();
 
   const count = await db.prepare("SELECT COUNT(*) AS n FROM agents").first<{ n: number }>();
   if (!count?.n) await seed(db);

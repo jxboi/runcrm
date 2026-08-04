@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { listAgents, listMessages } from "../crm";
-import { Agent, ENTITIES, TraceEntry } from "../types";
+import { getThread, listAgents, listMessages } from "../crm";
+import { Agent, ChatThread, ENTITIES, TraceEntry } from "../types";
 import { client } from "./client";
 import { EmitFn } from "./events";
 import { executeTool, HandoffRequest, isWriteTool, toolsForAgent } from "./tools";
@@ -24,9 +24,10 @@ export interface AgentTurnResult {
 export interface RunOptions {
   signal?: AbortSignal;
   onEvent?: EmitFn;
+  thread?: ChatThread;
 }
 
-async function buildSystemPrompt(agent: Agent): Promise<string> {
+async function buildSystemPrompt(agent: Agent, thread: ChatThread): Promise<string> {
   // Teammates' access rights are listed too, so an agent knows who to hand work to.
   const roster = (await listAgents())
     .map(
@@ -38,9 +39,18 @@ async function buildSystemPrompt(agent: Agent): Promise<string> {
     .join("\n");
   const caps = ENTITIES.map((e) => `- ${e}: ${agent.capabilities[e]}`).join("\n");
 
+  const conversation = thread.account_name
+    ? `This is the dedicated account thread for "${thread.account_name}". Use that account as the default context when the user's wording is ambiguous, but still verify CRM records with your tools and follow explicit requests about other accounts.`
+    : thread.id === 1
+      ? "This is the workspace Home thread for cross-account work and general updates."
+      : "This is a standalone conversation. Infer its focus from the messages; do not assume it belongs to a particular account.";
+
   return `You are ${agent.name}, an AI agent working inside RunCRM, a small CRM shared by a human user and several agents.
 
 You operate in a group chat. Messages from the human are prefixed "[User]" and messages from other agents are prefixed "[Their Name]". Your own past replies appear unprefixed. Reply as yourself — never write a "[Name]" prefix yourself.
+
+Current conversation: ${thread.title}
+${conversation}
 
 Your access rights (enforced server-side):
 ${caps}
@@ -67,8 +77,8 @@ ${agent.instructions || "(none)"}
 Today's date: ${new Date().toISOString().slice(0, 10)}`;
 }
 
-async function buildHistory(agent: Agent): Promise<Anthropic.Beta.BetaMessageParam[]> {
-  const recent = (await listMessages(200)).slice(-60);
+async function buildHistory(agent: Agent, threadId: number): Promise<Anthropic.Beta.BetaMessageParam[]> {
+  const recent = (await listMessages(200, threadId)).slice(-60);
   const history: Anthropic.Beta.BetaMessageParam[] = [];
   for (const m of recent) {
     if (m.role === "agent" && m.agent_id === agent.id) {
@@ -95,8 +105,10 @@ export async function runAgentTurn(agent: Agent, opts: RunOptions = {}): Promise
   const trace: TraceEntry[] = [];
   const textParts: string[] = [];
   const tools = toolsForAgent(agent);
-  const system = await buildSystemPrompt(agent);
-  const messages = await buildHistory(agent);
+  const thread = opts.thread ?? (await getThread(1));
+  if (!thread) throw new Error("The Home thread is unavailable");
+  const system = await buildSystemPrompt(agent, thread);
+  const messages = await buildHistory(agent, thread.id);
   const mutationIds: number[] = [];
   const proposalIds: number[] = [];
   let handoff: HandoffRequest | undefined;

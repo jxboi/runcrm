@@ -4,6 +4,7 @@ import {
   ACTIVITY_TYPES,
   Agent,
   Capabilities,
+  ChatThread,
   ChatMessage,
   Contact,
   CONTACT_STATUSES,
@@ -14,6 +15,19 @@ import {
   TASK_STATUSES,
   TraceEntry,
 } from "./types";
+
+function rowToThread(row: Record<string, unknown>): ChatThread {
+  return {
+    id: Number(row.id),
+    title: String(row.title),
+    account_name: (row.account_name as string) ?? null,
+    message_count: Number(row.message_count ?? 0),
+    last_message: (row.last_message as string) ?? null,
+    last_message_at: (row.last_message_at as string) ?? null,
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
 
 function rowToAgent(row: Record<string, unknown>): Agent {
   const caps: Capabilities = { contacts: "none", deals: "none", activities: "none", tasks: "none" };
@@ -50,6 +64,57 @@ export async function first<T>(sql: string, params: unknown[] = []): Promise<T |
 export async function run(sql: string, params: unknown[] = []) {
   const db = await ensureDb();
   return db.prepare(sql).bind(...(params as D1Value[])).run();
+}
+
+const THREAD_SELECT = `SELECT t.*,
+  (SELECT COUNT(*) FROM messages m WHERE m.thread_id = t.id) AS message_count,
+  (SELECT m.content FROM messages m WHERE m.thread_id = t.id ORDER BY m.id DESC LIMIT 1) AS last_message,
+  (SELECT m.created_at FROM messages m WHERE m.thread_id = t.id ORDER BY m.id DESC LIMIT 1) AS last_message_at
+  FROM threads t`;
+
+export async function listThreads(): Promise<ChatThread[]> {
+  const rows = await all<Record<string, unknown>>(
+    `${THREAD_SELECT} ORDER BY CASE WHEN t.id = 1 THEN 0 ELSE 1 END, COALESCE(last_message_at, t.created_at) DESC, t.id DESC`
+  );
+  return rows.map(rowToThread);
+}
+
+export async function getThread(id: number): Promise<ChatThread | null> {
+  const row = await first<Record<string, unknown>>(`${THREAD_SELECT} WHERE t.id = ?`, [id]);
+  return row ? rowToThread(row) : null;
+}
+
+/** Start a normal chat without asking the user to classify it up front. */
+export async function createConversationThread(): Promise<ChatThread> {
+  // Reuse the latest untouched draft so repeated clicks cannot fill history
+  // with empty conversations.
+  const empty = await first<Record<string, unknown>>(
+    `${THREAD_SELECT} WHERE t.id <> 1 AND t.account_name IS NULL
+      AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id)
+      ORDER BY t.id DESC LIMIT 1`
+  );
+  if (empty) return rowToThread(empty);
+
+  const result = await run("INSERT INTO threads (title, account_name) VALUES ('New conversation', NULL)");
+  const thread = await getThread(Number(result.meta.last_row_id));
+  if (!thread) throw new Error("Could not start a new conversation");
+  return thread;
+}
+
+export async function createAccountThread(accountNameInput: string): Promise<ChatThread> {
+  const accountName = accountNameInput.trim().replace(/\s+/g, " ");
+  if (!accountName) throw new Error("Account name is required");
+  if (accountName.length > 80) throw new Error("Account name must be 80 characters or fewer");
+  await run(
+    "INSERT INTO threads (title, account_name) VALUES (?, ?) ON CONFLICT(account_name) DO NOTHING",
+    [accountName, accountName]
+  );
+  const row = await first<Record<string, unknown>>(
+    `${THREAD_SELECT} WHERE t.account_name = ? COLLATE NOCASE`,
+    [accountName]
+  );
+  if (!row) throw new Error("Could not create that account thread");
+  return rowToThread(row);
 }
 
 export async function listAgents(): Promise<Agent[]> {
@@ -100,6 +165,7 @@ export async function updateAgent(id: number, input: {
 }
 
 export async function deleteAgent(id: number): Promise<boolean> {
+  await run("UPDATE routines SET enabled = 0, next_run_at = NULL, lock_token = NULL, locked_at = NULL, updated_at = datetime('now') WHERE agent_id = ?", [id]);
   return (await run("DELETE FROM agents WHERE id = ?", [id])).meta.changes > 0;
 }
 
@@ -260,6 +326,7 @@ const UNDOABLE_COUNT =
 function rowToMessage(row: Record<string, unknown>): ChatMessage {
   return {
     id: Number(row.id),
+    thread_id: Number(row.thread_id ?? 1),
     role: row.role as "user" | "agent",
     agent_id: row.agent_id == null ? null : Number(row.agent_id),
     agent_name: (row.agent_name as string) ?? null,
@@ -272,8 +339,8 @@ function rowToMessage(row: Record<string, unknown>): ChatMessage {
   };
 }
 
-export async function listMessages(limit = 200): Promise<ChatMessage[]> {
-  const rows = await all<Record<string, unknown>>(`SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji, ${UNDOABLE_COUNT} FROM messages m LEFT JOIN agents a ON a.id = m.agent_id ORDER BY m.id DESC LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
+export async function listMessages(limit = 200, threadId = 1): Promise<ChatMessage[]> {
+  const rows = await all<Record<string, unknown>>(`SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji, ${UNDOABLE_COUNT} FROM messages m LEFT JOIN agents a ON a.id = m.agent_id WHERE m.thread_id = ? ORDER BY m.id DESC LIMIT ${Math.min(Math.max(limit, 1), 500)}`, [threadId]);
   return rows.reverse().map(rowToMessage);
 }
 
@@ -282,11 +349,22 @@ function safeParseTrace(raw: unknown): TraceEntry[] {
 }
 
 export async function insertMessage(input: {
-  role: "user" | "agent"; agent_id?: number | null; content: string; trace?: TraceEntry[]; is_error?: boolean;
+  role: "user" | "agent"; thread_id?: number; agent_id?: number | null; content: string; trace?: TraceEntry[]; is_error?: boolean;
 }): Promise<ChatMessage> {
-  const result = await run("INSERT INTO messages (role, agent_id, content, trace, is_error) VALUES (?, ?, ?, ?, ?)", [
-    input.role, input.agent_id ?? null, input.content, JSON.stringify(input.trace ?? []), input.is_error ? 1 : 0,
+  const threadId = input.thread_id ?? 1;
+  const result = await run("INSERT INTO messages (thread_id, role, agent_id, content, trace, is_error) VALUES (?, ?, ?, ?, ?, ?)", [
+    threadId, input.role, input.agent_id ?? null, input.content, JSON.stringify(input.trace ?? []), input.is_error ? 1 : 0,
   ]);
+  const normalized = input.content.replace(/\s+/g, " ").trim();
+  const words = normalized.split(" ");
+  const automaticTitle = `${words.slice(0, 8).join(" ")}${words.length > 8 ? "…" : ""}`.slice(0, 80);
+  await run(
+    `UPDATE threads SET
+      title = CASE WHEN account_name IS NULL AND title = 'New conversation' AND ? = 'user' THEN ? ELSE title END,
+      updated_at = datetime('now')
+      WHERE id = ?`,
+    [input.role, automaticTitle || "Conversation", threadId]
+  );
   const row = await first<Record<string, unknown>>(`SELECT m.*, a.name AS agent_name, a.emoji AS agent_emoji, ${UNDOABLE_COUNT} FROM messages m LEFT JOIN agents a ON a.id = m.agent_id WHERE m.id = ?`, [result.meta.last_row_id]);
   return rowToMessage(row!);
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Agent,
   ChatMessage,
+  ChatThread,
   ENTITY_SINGULAR,
   EntityRef,
   LiveRun,
@@ -17,6 +18,7 @@ import { MENTION_PATTERN, nameKey } from "@/lib/agent/mentions";
 import { fmtTime } from "@/lib/client";
 
 export default function Chat({
+  thread,
   agents,
   messages,
   recipient,
@@ -30,6 +32,7 @@ export default function Chat({
   proposals,
   onDecideProposal,
 }: {
+  thread: ChatThread;
   agents: Agent[];
   messages: ChatMessage[];
   recipient: Recipient;
@@ -37,7 +40,7 @@ export default function Chat({
   runs: LiveRun[];
   notices: RunNotice[];
   onSend: (content: string) => Promise<boolean>;
-  onStop: (agentId: number) => void;
+  onStop: (runKey: string, agentId: number) => void;
   onUndo: (messageId: number) => void;
   onFocusRecord: (ref: EntityRef) => void;
   proposals: Proposal[];
@@ -138,9 +141,16 @@ export default function Chat({
     <>
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800/70 px-5">
         <div>
-          <h1 className="text-sm font-semibold text-slate-200">Workspace chat</h1>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}</span>
+            <h1 className="text-sm font-semibold text-slate-200">{thread.title}</h1>
+          </div>
           <p className="text-[11px] text-slate-500">
-            Ask an agent to look things up or change CRM data — actions show up in the panel on the right.
+            {thread.account_name
+              ? `Account thread · agents use ${thread.account_name} as the default context.`
+              : thread.id === 1
+                ? "Workspace-wide conversation for cross-account work and daily updates."
+                : "A focused conversation; its title is created from your first message."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -162,10 +172,18 @@ export default function Chat({
         {messages.length === 0 && runs.length === 0 && (
           <div className="mx-auto mt-16 max-w-sm rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center">
             <div className="text-2xl">💬</div>
-            <div className="mt-2 text-sm font-medium text-slate-300">Start the conversation</div>
+            <div className="mt-2 text-sm font-medium text-slate-300">
+              {thread.account_name ? `Start the ${thread.account_name} conversation` : "Start the conversation"}
+            </div>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Try: &ldquo;Add a contact — Jane Doe at Globex, jane@globex.com&rdquo; or
-              &ldquo;@Data&nbsp;Analyst what&rsquo;s stuck?&rdquo;
+              {thread.account_name ? (
+                <>Try: &ldquo;Summarize this account and tell me the next best action.&rdquo;</>
+              ) : (
+                <>
+                  Try: &ldquo;Add a contact — Jane Doe at Globex, jane@globex.com&rdquo; or
+                  &ldquo;@Data&nbsp;Analyst what&rsquo;s stuck?&rdquo;
+                </>
+              )}
             </p>
           </div>
         )}
@@ -189,7 +207,7 @@ export default function Chat({
         ))}
 
         {runs.map((run) => (
-          <LiveBubble key={run.agentId} run={run} onStop={() => onStop(run.agentId)} />
+          <LiveBubble key={`${run.runKey}:${run.agentId}`} run={run} onStop={() => onStop(run.runKey, run.agentId)} />
         ))}
       </div>
 
