@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   Agent,
@@ -16,6 +16,40 @@ import { api, fmtMoney, fmtTime } from "@/lib/client";
 import RoutinesTab from "./RoutinesTab";
 
 type Tab = "contacts" | "deals" | "tasks" | "routines" | "activity";
+type Section = "records" | "work" | "activity";
+
+const SECTION_FOR_TAB: Record<Tab, Section> = {
+  contacts: "records",
+  deals: "records",
+  tasks: "work",
+  routines: "work",
+  activity: "activity",
+};
+
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: "records", label: "Records" },
+  { id: "work", label: "Work" },
+  { id: "activity", label: "Activity" },
+];
+
+function handleTabKeyDown<T extends string>(
+  event: KeyboardEvent<HTMLButtonElement>,
+  currentIndex: number,
+  ids: readonly T[],
+  onSelect: (id: T) => void
+) {
+  let nextIndex: number;
+  if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % ids.length;
+  else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + ids.length) % ids.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = ids.length - 1;
+  else return;
+
+  event.preventDefault();
+  onSelect(ids[nextIndex]);
+  const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]");
+  buttons?.[nextIndex]?.focus();
+}
 
 /** Entity names from a trace ref map onto the panel's tabs. */
 const TAB_FOR_ENTITY: Record<Entity, Tab> = {
@@ -119,13 +153,29 @@ export default function DataPanel({
   onError: (msg: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("contacts");
+  const [lastRecordsTab, setLastRecordsTab] = useState<"contacts" | "deals">("contacts");
+  const [lastWorkTab, setLastWorkTab] = useState<"tasks" | "routines">("tasks");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [runningTaskId, setRunningTaskId] = useState<number | null>(null);
   const [routineCount, setRoutineCount] = useState(0);
-  const { focusedId, containerRef } = useFocusedRecord(focusRef, setTab);
+
+  const selectTab = useCallback((nextTab: Tab) => {
+    setTab(nextTab);
+    if (nextTab === "contacts" || nextTab === "deals") setLastRecordsTab(nextTab);
+    if (nextTab === "tasks" || nextTab === "routines") setLastWorkTab(nextTab);
+  }, []);
+
+  const { focusedId, containerRef } = useFocusedRecord(focusRef, selectTab);
+  const section = SECTION_FOR_TAB[tab];
+
+  const selectSection = (nextSection: Section) => {
+    if (nextSection === "records") selectTab(lastRecordsTab);
+    else if (nextSection === "work") selectTab(lastWorkTab);
+    else selectTab("activity");
+  };
 
   const reload = useCallback(async () => {
     try {
@@ -159,73 +209,166 @@ export default function DataPanel({
     }
   };
 
-  const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: "contacts", label: "Contacts", count: contacts.length },
-    { id: "deals", label: "Deals", count: deals.length },
-    { id: "tasks", label: "Tasks", count: tasks.filter((t) => t.status === "todo" || t.status === "running").length },
-    { id: "routines", label: "Routines", count: routineCount },
-    { id: "activity", label: "Activity", count: activities.length },
-  ];
+  const secondaryTabs: { id: Tab; label: string; count: number; attention?: boolean }[] | null =
+    section === "records"
+      ? [
+          { id: "contacts", label: "Contacts", count: contacts.length },
+          { id: "deals", label: "Deals", count: deals.length },
+        ]
+      : section === "work"
+        ? [
+            {
+              id: "tasks",
+              label: "Tasks",
+              count: tasks.filter((task) => task.status === "todo" || task.status === "running").length,
+              attention: true,
+            },
+            { id: "routines", label: "Routines", count: routineCount },
+          ]
+        : null;
 
   return (
     <aside className="crm-data-panel hidden w-[400px] shrink-0 flex-col overflow-x-hidden bg-slate-950 lg:flex">
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b border-slate-800/70 px-3">
-        {tabs.map((t) => (
+      <div
+        role="tablist"
+        aria-label="CRM data sections"
+        className="flex h-14 shrink-0 items-stretch gap-6 border-b border-slate-800/70 px-4"
+      >
+        {SECTIONS.map((item, index) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`rounded-lg px-2 py-1.5 text-[11px] font-medium transition ${
-              tab === t.id ? "bg-slate-800 text-slate-100" : "text-slate-500 hover:text-slate-300"
+            key={item.id}
+            id={`crm-section-tab-${item.id}`}
+            type="button"
+            role="tab"
+            aria-selected={section === item.id}
+            aria-controls={`crm-section-panel-${item.id}`}
+            tabIndex={section === item.id ? 0 : -1}
+            onClick={() => selectSection(item.id)}
+            onKeyDown={(event) =>
+              handleTabKeyDown(
+                event,
+                index,
+                SECTIONS.map((candidate) => candidate.id),
+                selectSection
+              )
+            }
+            className={`-mb-px border-b-2 px-0.5 pt-0.5 text-xs font-medium transition ${
+              section === item.id
+                ? "border-indigo-500 text-slate-100"
+                : "border-transparent text-slate-500 hover:border-slate-700 hover:text-slate-300"
             }`}
           >
-            {t.label}
-            <span className={`ml-1.5 text-[10px] ${tab === t.id ? "text-indigo-300" : "text-slate-600"}`}>{t.count}</span>
+            {item.label}
           </button>
         ))}
       </div>
 
-      <div ref={containerRef} className="flex-1 overflow-y-auto p-3">
-        {tab === "contacts" && (
-          <ContactsTab
-            contacts={contacts}
-            focusedId={focusedId}
-            onCreated={reload}
-            onOpenAccountThread={onOpenAccountThread}
-            onError={onError}
-          />
+      <div
+        ref={containerRef}
+        id={`crm-section-panel-${section}`}
+        role="tabpanel"
+        aria-labelledby={`crm-section-tab-${section}`}
+        className="flex-1 overflow-y-auto p-3"
+      >
+        {secondaryTabs && (
+          <div
+            role="tablist"
+            aria-label={`${section === "records" ? "Record" : "Work"} views`}
+            className="mb-3 flex rounded-xl bg-slate-900/75 p-1"
+          >
+            {secondaryTabs.map((item, index) => {
+              const selected = tab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  id={`crm-view-tab-${item.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`crm-view-panel-${item.id}`}
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => selectTab(item.id)}
+                  onKeyDown={(event) =>
+                    handleTabKeyDown(
+                      event,
+                      index,
+                      secondaryTabs.map((candidate) => candidate.id),
+                      selectTab
+                    )
+                  }
+                  className={`flex min-w-0 flex-1 items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-medium transition ${
+                    selected
+                      ? "bg-slate-800 text-slate-100 shadow-sm"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  {item.label}
+                  {item.count > 0 && (
+                    <span
+                      className={`ml-1.5 tabular-nums ${
+                        item.attention
+                          ? "rounded-full bg-indigo-950 px-1.5 py-0.5 text-[9px] leading-none text-indigo-300"
+                          : selected
+                            ? "text-indigo-300"
+                            : "text-slate-600"
+                      }`}
+                    >
+                      {item.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         )}
-        {tab === "deals" && (
-          <DealsTab
-            deals={deals}
-            contacts={contacts}
-            focusedId={focusedId}
-            onCreated={reload}
-            onError={onError}
-          />
-        )}
-        {tab === "tasks" && (
-          <TasksTab
-            tasks={tasks}
-            agents={agents}
-            busyAgentIds={busyAgentIds}
-            runningTaskId={runningTaskId}
-            focusedId={focusedId}
-            onRun={runTask}
-            onCreated={reload}
-            onError={onError}
-          />
-        )}
-        {tab === "routines" && (
-          <RoutinesTab
-            agents={agents}
-            busyAgentIds={busyAgentIds}
-            version={version}
-            onRun={onRunRoutine}
-            onCount={setRoutineCount}
-            onError={onError}
-          />
-        )}
-        {tab === "activity" && <ActivityTab activities={activities} focusedId={focusedId} />}
+
+        <div
+          id={`crm-view-panel-${tab}`}
+          role={secondaryTabs ? "tabpanel" : undefined}
+          aria-labelledby={secondaryTabs ? `crm-view-tab-${tab}` : undefined}
+        >
+          {tab === "contacts" && (
+            <ContactsTab
+              contacts={contacts}
+              focusedId={focusedId}
+              onCreated={reload}
+              onOpenAccountThread={onOpenAccountThread}
+              onError={onError}
+            />
+          )}
+          {tab === "deals" && (
+            <DealsTab
+              deals={deals}
+              contacts={contacts}
+              focusedId={focusedId}
+              onCreated={reload}
+              onError={onError}
+            />
+          )}
+          {tab === "tasks" && (
+            <TasksTab
+              tasks={tasks}
+              agents={agents}
+              busyAgentIds={busyAgentIds}
+              runningTaskId={runningTaskId}
+              focusedId={focusedId}
+              onRun={runTask}
+              onCreated={reload}
+              onError={onError}
+            />
+          )}
+          {tab === "routines" && (
+            <RoutinesTab
+              agents={agents}
+              busyAgentIds={busyAgentIds}
+              version={version}
+              onRun={onRunRoutine}
+              onCount={setRoutineCount}
+              onError={onError}
+            />
+          )}
+          {tab === "activity" && <ActivityTab activities={activities} focusedId={focusedId} />}
+        </div>
       </div>
     </aside>
   );
