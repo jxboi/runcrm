@@ -3,6 +3,63 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* The product uses the slate scale semantically. Inverting it here moves
+     the complete UI to the airy, paper-like system used by the new shell. */
+  --color-slate-50: #111216;
+  --color-slate-100: #191b21;
+  --color-slate-200: #2b2e36;
+  --color-slate-300: #41454f;
+  --color-slate-400: #5f6570;
+  --color-slate-500: #7e8490;
+  --color-slate-600: #a6abb4;
+  --color-slate-700: #d2d5dc;
+  --color-slate-800: #e6e8ec;
+  --color-slate-900: #f4f5f7;
+  --color-slate-950: #fbfbfc;
+
+  --color-indigo-200: #4e3a92;
+  --color-indigo-300: #5f49aa;
+  --color-indigo-400: #7358cf;
+  --color-indigo-500: #7d63dc;
+  --color-indigo-600: #6b50cb;
+  --color-indigo-700: #5940b4;
+  --color-indigo-800: #dcd4f8;
+  --color-indigo-900: #e9e4fb;
+  --color-indigo-950: #f1eefc;
+
+  --color-violet-200: #59389c;
+  --color-violet-300: #6c46b5;
+  --color-violet-500: #8c62dc;
+  --color-violet-600: #7951c7;
+  --color-violet-950: #f3edfc;
+
+  --color-sky-200: #15587b;
+  --color-sky-300: #17678f;
+  --color-sky-500: #3493c6;
+  --color-sky-600: #237aa8;
+  --color-sky-950: #eaf7fc;
+
+  --color-emerald-200: #116247;
+  --color-emerald-300: #157054;
+  --color-emerald-400: #218564;
+  --color-emerald-500: #31a078;
+  --color-emerald-600: #268663;
+  --color-emerald-950: #e7f7f0;
+
+  --color-amber-100: #704100;
+  --color-amber-200: #80500a;
+  --color-amber-300: #96610f;
+  --color-amber-400: #b27617;
+  --color-amber-500: #d39a31;
+  --color-amber-950: #fff7df;
+
+  --color-rose-200: #8f2f42;
+  --color-rose-300: #a4394e;
+  --color-rose-400: #bf4c60;
+  --color-rose-500: #d05d70;
+  --color-rose-600: #b34256;
+  --color-rose-950: #fff0f2;
 }
 
 html,
@@ -11,14 +68,38 @@ body {
 }
 
 body {
-  background: #020617;
-  color: #e2e8f0;
+  background: #b8babf;
+  color: #191b21;
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(107, 80, 203, 0.55);
+  outline-offset: 2px;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: #c9ccd3 transparent;
 }
 
 *::-webkit-scrollbar {
@@ -27,7 +108,7 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #c9ccd3;
   border-radius: 4px;
 }
 
@@ -42,6 +123,91 @@ details > summary {
 
 details > summary::-webkit-details-marker {
   display: none;
+}
+
+/* ------------------------------------------------------------ workspace */
+
+.crm-workspace {
+  color-scheme: light;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(255, 255, 255, 0.34), transparent 36%),
+    #b8babf;
+  padding: clamp(0px, 3.25vw, 58px);
+}
+
+.crm-frame {
+  overflow: hidden;
+  border: 1px solid rgba(132, 136, 145, 0.34);
+  border-radius: 22px;
+  background: #fbfbfc;
+  box-shadow:
+    0 30px 90px rgba(45, 47, 54, 0.2),
+    0 2px 8px rgba(45, 47, 54, 0.08);
+}
+
+.crm-sidebar {
+  background: linear-gradient(180deg, #fafafa 0%, #f5f6f7 100%);
+}
+
+.crm-mark {
+  box-shadow:
+    0 8px 22px rgba(107, 80, 203, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.75) inset;
+}
+
+.crm-canvas {
+  background-color: #fbfbfc;
+  background-image: radial-gradient(circle, rgba(156, 160, 170, 0.24) 0.8px, transparent 0.9px);
+  background-size: 18px 18px;
+}
+
+.crm-canvas > header,
+.crm-canvas > div:last-child {
+  background: rgba(251, 251, 252, 0.94);
+  backdrop-filter: blur(18px);
+}
+
+.crm-data-panel {
+  background: linear-gradient(180deg, #fafafa 0%, #f7f7f8 100%);
+}
+
+.crm-workspace input,
+.crm-workspace textarea,
+.crm-workspace select {
+  box-shadow: 0 1px 2px rgba(30, 32, 38, 0.035) inset;
+}
+
+.crm-workspace button {
+  letter-spacing: -0.005em;
+}
+
+@media (max-width: 1180px) {
+  .crm-workspace {
+    padding: 18px;
+  }
+
+  .crm-sidebar {
+    width: 224px;
+  }
+
+  .crm-data-panel {
+    width: 360px;
+  }
+}
+
+@media (max-width: 820px) {
+  .crm-workspace {
+    padding: 0;
+  }
+
+  .crm-frame {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .crm-sidebar {
+    display: none;
+  }
 }
 
 /* ---------------------------------------------------------------- landing */

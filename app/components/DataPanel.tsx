@@ -168,7 +168,7 @@ export default function DataPanel({
   ];
 
   return (
-    <aside className="hidden w-[400px] shrink-0 flex-col overflow-x-hidden bg-slate-950 lg:flex">
+    <aside className="crm-data-panel hidden w-[400px] shrink-0 flex-col overflow-x-hidden bg-slate-950 lg:flex">
       <div className="flex h-14 shrink-0 items-center gap-1 border-b border-slate-800/70 px-3">
         {tabs.map((t) => (
           <button
