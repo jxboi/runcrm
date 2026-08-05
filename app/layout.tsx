@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,11 +13,34 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "RunCRM — the CRM that runs itself",
-  description:
-    "You run the relationships. RunCRM runs the record. A chat-first CRM operated by a team of AI agents whose permissions live in code, not in prompts.",
-};
+const title = "RunCRM — the CRM that runs itself";
+const description =
+  "You run the relationships. RunCRM runs the record. A chat-first CRM operated by a team of AI agents whose permissions live in code, not in prompts.";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const image = new URL("/og.png", `${protocol}://${host}`).toString();
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      siteName: "RunCRM",
+      type: "website",
+      images: [{ url: image, width: 1731, height: 909, alt: "RunCRM chat-first workspace" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [image],
+    },
+  };
+}
 
 export default function RootLayout({
   children,

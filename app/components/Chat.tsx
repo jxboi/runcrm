@@ -476,6 +476,59 @@ function describeProposal(proposal: Proposal): string {
   return fields.length > 0 ? `${verb} — ${fields.join(" · ")}` : verb;
 }
 
+function contactPreviewValue(input: Record<string, unknown>, key: string): string | null {
+  const value = input[key];
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+/** A human-readable preview of the contact that will exist after approval. */
+function ContactProposalPreview({ proposal }: { proposal: Proposal }) {
+  const name = contactPreviewValue(proposal.input, "name") ?? "Unnamed contact";
+  const email = contactPreviewValue(proposal.input, "email");
+  const phone = contactPreviewValue(proposal.input, "phone");
+  const company = contactPreviewValue(proposal.input, "company");
+  const status = contactPreviewValue(proposal.input, "status") ?? "lead";
+  const notes = contactPreviewValue(proposal.input, "notes");
+  const initials = name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/70">
+      <div className="flex items-center gap-3 border-b border-slate-800 px-3 py-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-500/15 text-sm font-semibold text-indigo-200 ring-1 ring-indigo-400/30">
+          {initials || "?"}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-slate-100">{name}</div>
+          <div className="mt-0.5 truncate text-[11px] text-slate-400">{company ?? "No company"}</div>
+        </div>
+        <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium capitalize text-sky-300">
+          {status}
+        </span>
+      </div>
+
+      <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-1.5 px-3 py-2.5 text-xs">
+        <dt className="text-slate-500">Email</dt>
+        <dd className="break-all text-slate-300">{email ?? "—"}</dd>
+        <dt className="text-slate-500">Phone</dt>
+        <dd className="break-all text-slate-300">{phone ?? "—"}</dd>
+        {notes && (
+          <>
+            <dt className="text-slate-500">Notes</dt>
+            <dd className="whitespace-pre-wrap break-words text-slate-300">{notes}</dd>
+          </>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 /** A write held for approval: what it would do, and the two buttons that decide it. */
 function ProposalCard({
   proposal,
@@ -496,20 +549,29 @@ function ProposalCard({
   };
 
   return (
-    <div className="rounded-lg border border-amber-500/40 bg-amber-950/20 px-3 py-2">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
-        ⏸ Waiting for you
+    <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
+          ⏸ Waiting for you
+        </div>
+        {proposal.tool === "create_contact" && (
+          <span className="text-[10px] text-amber-200/70">Not created yet</span>
+        )}
       </div>
-      <div className="mt-1 break-words text-xs leading-relaxed text-amber-100">
-        {describeProposal(proposal)}
-      </div>
+      {proposal.tool === "create_contact" ? (
+        <ContactProposalPreview proposal={proposal} />
+      ) : (
+        <div className="mt-1 break-words text-xs leading-relaxed text-amber-100">
+          {describeProposal(proposal)}
+        </div>
+      )}
       <div className="mt-2 flex gap-2">
         <button
           onClick={() => void decide("approve")}
           disabled={busy}
           className="rounded-md bg-emerald-600/80 px-2.5 py-1 text-[11px] font-medium text-white transition enabled:hover:bg-emerald-500 disabled:opacity-50"
         >
-          Approve
+          {busy ? "Saving…" : proposal.tool === "create_contact" ? "Approve & create" : "Approve"}
         </button>
         <button
           onClick={() => void decide("reject")}

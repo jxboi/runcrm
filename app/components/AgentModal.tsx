@@ -164,7 +164,11 @@ export default function AgentModal({
             <div className="mt-1.5 grid grid-cols-2 gap-2">
               {(
                 [
-                  { value: "auto", title: "Go ahead", blurb: "Writes apply immediately. Still undoable." },
+                  {
+                    value: "auto",
+                    title: "Go ahead",
+                    blurb: "Writes apply immediately, except new contacts. Still undoable.",
+                  },
                   { value: "ask", title: "Ask me first", blurb: "Writes wait for your approval in chat." },
                 ] as { value: Autonomy; title: string; blurb: string }[]
               ).map((option) => (

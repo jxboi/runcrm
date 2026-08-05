@@ -2,8 +2,8 @@ import { all, first, run } from "./crm";
 import { Proposal, ProposalStatus } from "./types";
 
 /**
- * The gated-operator rung of the autonomy ladder: an agent set to "ask" files
- * its writes here instead of making them, and the user approves or rejects.
+ * Pending CRM writes live here until the user approves or rejects them. This
+ * includes every contact creation and every write made by an "ask" agent.
  *
  * Approval re-checks the agent's access rights before executing — a queued
  * proposal is a request, never a stored permission.

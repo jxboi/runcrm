@@ -14,8 +14,9 @@ export const ENTITY_SINGULAR: Record<Entity, string> = {
 export type Capabilities = Record<Entity, AccessLevel>;
 
 /**
- * First rung of the autonomy ladder: "auto" writes straight through, "ask"
- * files each write as a proposal for the user to approve.
+ * First rung of the autonomy ladder: "auto" writes straight through except
+ * for always-gated actions such as contact creation; "ask" files each write as
+ * a proposal for the user to approve.
  */
 export type Autonomy = "auto" | "ask";
 
@@ -33,7 +34,7 @@ export interface Agent {
 export const PROPOSAL_STATUSES = ["pending", "approved", "rejected"] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
-/** A write an "ask" agent wants to make, waiting on the user. */
+/** A write waiting on the user (including every new contact). */
 export interface Proposal {
   id: number;
   agent_id: number;

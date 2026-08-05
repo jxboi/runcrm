@@ -420,47 +420,49 @@ export default function Workspace() {
   const activeProposals = proposals.filter((proposal) => (proposal.thread_id ?? 1) === activeThreadId);
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        threads={threads}
-        activeThreadId={activeThreadId}
-        onSelectThread={selectThread}
-        onCreateThread={createThread}
-        agents={agents}
-        selectedAgentId={recipient === "auto" ? null : recipient}
-        busyAgentIds={busyAgentIds}
-        onSelect={setRecipient}
-        onNewAgent={() => setModal("new")}
-        onEditAgent={(a) => setModal(a)}
-      />
-      <main className="flex min-w-0 flex-1 flex-col border-x border-slate-800/70 bg-slate-950">
-        <Chat
-          key={activeThread.id}
-          thread={activeThread}
+    <div className="crm-workspace h-screen">
+      <div className="crm-frame flex h-full overflow-hidden">
+        <Sidebar
+          threads={threads}
+          activeThreadId={activeThreadId}
+          onSelectThread={selectThread}
+          onCreateThread={createThread}
           agents={agents}
-          messages={messages}
-          recipient={recipient}
-          onSelectRecipient={setRecipient}
-          runs={activeRuns}
-          notices={activeNotices}
-          onSend={sendMessage}
-          onStop={stopRun}
-          onUndo={undoMessage}
-          onFocusRecord={setFocusRef}
-          proposals={activeProposals}
-          onDecideProposal={decideProposal}
+          selectedAgentId={recipient === "auto" ? null : recipient}
+          busyAgentIds={busyAgentIds}
+          onSelect={setRecipient}
+          onNewAgent={() => setModal("new")}
+          onEditAgent={(a) => setModal(a)}
         />
-      </main>
-      <DataPanel
-        agents={agents}
-        version={dataVersion}
-        busyAgentIds={busyAgentIds}
-        focusRef={focusRef}
-        onRunTask={runTask}
-        onRunRoutine={runRoutine}
-        onOpenAccountThread={openThread}
-        onError={showToast}
-      />
+        <main className="crm-canvas flex min-w-0 flex-1 flex-col border-x border-slate-800/70 bg-slate-950">
+          <Chat
+            key={activeThread.id}
+            thread={activeThread}
+            agents={agents}
+            messages={messages}
+            recipient={recipient}
+            onSelectRecipient={setRecipient}
+            runs={activeRuns}
+            notices={activeNotices}
+            onSend={sendMessage}
+            onStop={stopRun}
+            onUndo={undoMessage}
+            onFocusRecord={setFocusRef}
+            proposals={activeProposals}
+            onDecideProposal={decideProposal}
+          />
+        </main>
+        <DataPanel
+          agents={agents}
+          version={dataVersion}
+          busyAgentIds={busyAgentIds}
+          focusRef={focusRef}
+          onRunTask={runTask}
+          onRunRoutine={runRoutine}
+          onOpenAccountThread={openThread}
+          onError={showToast}
+        />
+      </div>
 
       {modal !== "closed" && (
         <AgentModal

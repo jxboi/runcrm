@@ -70,7 +70,7 @@ export const mutations = sqliteTable("mutations", {
   undoneAt: text("undone_at"),
 }, (table) => [index("idx_mutations_message_id").on(table.messageId)]);
 
-/** Writes an "ask" agent wants to make, held until the user decides. */
+/** CRM writes held until the user decides, including all contact creation. */
 export const proposals = sqliteTable("proposals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),

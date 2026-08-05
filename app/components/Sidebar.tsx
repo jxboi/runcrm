@@ -46,9 +46,9 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col bg-slate-950">
+    <aside className="crm-sidebar flex w-64 shrink-0 flex-col bg-slate-950">
       <div className="flex items-center gap-2.5 px-5 pb-5 pt-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-lg shadow-indigo-950">
+        <div className="crm-mark flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-lg shadow-indigo-950">
           R
         </div>
         <div>

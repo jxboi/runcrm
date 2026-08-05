@@ -93,7 +93,8 @@ const TOOL_SPECS: ToolSpec[] = [
     level: "write",
     def: {
       name: "create_contact",
-      description: "Create a new contact. Check with list_contacts first to avoid duplicates.",
+      description:
+        "Prepare a new contact for the user to review. Check with list_contacts first to avoid duplicates. This action always waits for explicit approval before the contact is created.",
       input_schema: {
         type: "object",
         properties: {
@@ -383,6 +384,7 @@ export function isWriteTool(name: string): boolean {
 }
 
 const MAX_RESULT_CHARS = 6000;
+const ALWAYS_REQUIRE_APPROVAL = new Set(["create_contact"]);
 
 export interface ToolOutcome {
   result: string;
@@ -400,10 +402,11 @@ export interface ToolOutcome {
 /**
  * Execute one tool call on behalf of an agent, enforcing its access rights.
  *
- * This is the single enforcement point: access rights are checked here, and
- * "ask" agents have their writes diverted into proposals here too. Approving a
- * proposal comes back through this same function with `skipApproval`, so the
- * permission check is never bypassed.
+ * This is the single enforcement point: access rights are checked here,
+ * contact creation always requires approval, and "ask" agents have their other
+ * writes diverted into proposals too. Approving a proposal comes back through
+ * this same function with `skipApproval`, so the permission check is never
+ * bypassed.
  */
 export async function executeTool(
   agent: Agent,
@@ -420,10 +423,12 @@ export async function executeTool(
     };
   }
 
-  // An "ask" agent describes the write instead of making it. Note this runs
-  // only after the access check above — a proposal can't ask for more than the
-  // agent was already allowed to do.
-  if (agent.autonomy === "ask" && spec.level === "write" && spec.entity && !options.skipApproval) {
+  // Contact creation is always previewed, even for otherwise autonomous
+  // agents. Other writes follow the agent's autonomy setting. This runs only
+  // after the access check, so a proposal cannot ask for more than the agent
+  // was already allowed to do.
+  const requiresApproval = ALWAYS_REQUIRE_APPROVAL.has(name) || agent.autonomy === "ask";
+  if (requiresApproval && spec.level === "write" && spec.entity && !options.skipApproval) {
     const proposalId = await createProposal({ agentId: agent.id, tool: name, input: input ?? {} });
     return {
       result: `Filed proposal #${proposalId} for approval — ${name} was NOT executed. The user will approve or reject it. Do not retry this call or try another way around it; tell the user what you proposed and move on.`,
