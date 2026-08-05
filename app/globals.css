@@ -132,17 +132,16 @@ details > summary::-webkit-details-marker {
   background:
     radial-gradient(circle at 50% 8%, rgba(255, 255, 255, 0.34), transparent 36%),
     #b8babf;
-  padding: clamp(0px, 3.25vw, 58px);
+  padding: 0;
 }
 
 .crm-frame {
+  width: 100%;
   overflow: hidden;
-  border: 1px solid rgba(132, 136, 145, 0.34);
-  border-radius: 22px;
+  border: 0;
+  border-radius: 0;
   background: #fbfbfc;
-  box-shadow:
-    0 30px 90px rgba(45, 47, 54, 0.2),
-    0 2px 8px rgba(45, 47, 54, 0.08);
+  box-shadow: none;
 }
 
 .crm-sidebar {
@@ -183,7 +182,7 @@ details > summary::-webkit-details-marker {
 
 @media (max-width: 1180px) {
   .crm-workspace {
-    padding: 18px;
+    padding: 0;
   }
 
   .crm-sidebar {
