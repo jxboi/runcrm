@@ -10,10 +10,15 @@ import { nameKey } from "./mentions";
 export async function routeToAgent(content: string, agents: Agent[]): Promise<Agent> {
   if (agents.length <= 1) return agents[0];
 
+  const workflowAgent = agents.find((agent) => agent.kind === "workflow");
+  if (workflowAgent && /\b(workflow|automation|automate|trigger|if\s*\/\s*else)\b/i.test(content)) {
+    return workflowAgent;
+  }
+
   const roster = agents
     .map(
       (a) =>
-        `- ${a.name} | access: ${ENTITIES.map((e) => `${e}=${a.capabilities[e]}`).join(", ")} | brief: ${
+        `- ${a.name} | role: ${a.kind === "workflow" ? "workflow builder" : "CRM agent"} | access: ${ENTITIES.map((e) => `${e}=${a.capabilities[e]}`).join(", ")} | brief: ${
           a.instructions.slice(0, 240) || "(none)"
         }`
     )

@@ -5,6 +5,7 @@ export const agents = sqliteTable("agents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   emoji: text("emoji").notNull().default("🤖"),
+  kind: text("kind").notNull().default("general"),
   instructions: text("instructions").notNull().default(""),
   capabilities: text("capabilities").notNull().default("{}"),
   autonomy: text("autonomy").notNull().default("auto"),
@@ -12,21 +13,39 @@ export const agents = sqliteTable("agents", {
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 });
 
+export const salesReps = sqliteTable("sales_reps", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+}, (table) => [index("idx_sales_reps_name").on(table.name)]);
+
 export const contacts = sqliteTable("contacts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(), email: text("email"), phone: text("phone"), company: text("company"),
+  salesRepId: integer("sales_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
   status: text("status").notNull().default("lead"), notes: text("notes"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
-}, (table) => [index("idx_contacts_updated_at").on(table.updatedAt)]);
+}, (table) => [
+  index("idx_contacts_updated_at").on(table.updatedAt),
+  index("idx_contacts_sales_rep_id").on(table.salesRepId),
+]);
 
 export const deals = sqliteTable("deals", {
   id: integer("id").primaryKey({ autoIncrement: true }), title: text("title").notNull(),
   contactId: integer("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  closedBySalesRepId: integer("closed_by_sales_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
+  closedAt: text("closed_at"),
   value: real("value").notNull().default(0), stage: text("stage").notNull().default("lead"), notes: text("notes"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
-}, (table) => [index("idx_deals_updated_at").on(table.updatedAt)]);
+}, (table) => [
+  index("idx_deals_updated_at").on(table.updatedAt),
+  index("idx_deals_closed_by_sales_rep_id").on(table.closedBySalesRepId),
+]);
 
 export const activities = sqliteTable("activities", {
   id: integer("id").primaryKey({ autoIncrement: true }), type: text("type").notNull().default("note"),
@@ -38,10 +57,14 @@ export const activities = sqliteTable("activities", {
 export const tasks = sqliteTable("tasks", {
   id: integer("id").primaryKey({ autoIncrement: true }), title: text("title").notNull(), description: text("description"),
   assigneeAgentId: integer("assignee_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  assigneeSalesRepId: integer("assignee_sales_rep_id").references(() => salesReps.id, { onDelete: "set null" }),
   status: text("status").notNull().default("todo"), result: text("result"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
-}, (table) => [index("idx_tasks_status").on(table.status)]);
+}, (table) => [
+  index("idx_tasks_status").on(table.status),
+  index("idx_tasks_assignee_sales_rep_id").on(table.assigneeSalesRepId),
+]);
 
 export const threads = sqliteTable("threads", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -119,3 +142,42 @@ export const routineRuns = sqliteTable("routine_runs", {
   uniqueIndex("idx_routine_runs_key").on(table.runKey),
   index("idx_routine_runs_routine").on(table.routineId, table.startedAt),
 ]);
+
+/** A workflow points at one immutable definition version at a time. */
+export const workflows = sqliteTable("workflows", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status").notNull().default("draft"),
+  currentVersion: integer("current_version").notNull().default(1),
+  createdByAgentId: integer("created_by_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+}, (table) => [index("idx_workflows_status").on(table.status, table.updatedAt)]);
+
+export const workflowVersions = sqliteTable("workflow_versions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workflowId: integer("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  definition: text("definition").notNull(),
+  changeSummary: text("change_summary").notNull().default("Initial workflow"),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  uniqueIndex("idx_workflow_versions_number").on(table.workflowId, table.version),
+  index("idx_workflow_versions_workflow").on(table.workflowId, table.createdAt),
+]);
+
+export const workflowRuns = sqliteTable("workflow_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workflowId: integer("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  status: text("status").notNull().default("running"),
+  trigger: text("trigger").notNull().default("test"),
+  input: text("input").notNull().default("{}"),
+  trace: text("trace").notNull().default("[]"),
+  output: text("output"),
+  error: text("error"),
+  startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
+  completedAt: text("completed_at"),
+}, (table) => [index("idx_workflow_runs_workflow").on(table.workflowId, table.startedAt)]);

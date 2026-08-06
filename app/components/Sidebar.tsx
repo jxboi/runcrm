@@ -21,6 +21,8 @@ export default function Sidebar({
   onSelect,
   onNewAgent,
   onEditAgent,
+  workspaceMode,
+  onOpenWorkflowStudio,
 }: {
   threads: ChatThread[];
   activeThreadId: number;
@@ -32,6 +34,8 @@ export default function Sidebar({
   onSelect: (id: Recipient) => void;
   onNewAgent: () => void;
   onEditAgent: (agent: Agent) => void;
+  workspaceMode: "crm" | "workflows";
+  onOpenWorkflowStudio: () => void;
 }) {
   const [savingThread, setSavingThread] = useState(false);
 
@@ -55,6 +59,24 @@ export default function Sidebar({
           <div className="text-sm font-semibold tracking-tight text-slate-100">RunCRM</div>
           <div className="text-[11px] text-slate-500">chat-first CRM · v0.1</div>
         </div>
+      </div>
+
+      <div className="px-3 pb-4">
+        <button
+          onClick={onOpenWorkflowStudio}
+          className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+            workspaceMode === "workflows"
+              ? "border-indigo-500/45 bg-indigo-500/10 shadow-sm"
+              : "border-slate-800 bg-white/55 hover:border-indigo-500/35 hover:bg-indigo-500/5"
+          }`}
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-500/25 bg-indigo-500/10 text-sm text-indigo-400">⌁</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold text-slate-200">Workflow Studio</span>
+            <span className="mt-0.5 block text-[9px] text-slate-500">Build automations with AI</span>
+          </span>
+          <span className="text-xs text-slate-600">›</span>
+        </button>
       </div>
 
       <div className="flex items-center justify-between px-5 pb-2">
@@ -143,6 +165,9 @@ export default function Sidebar({
                     )}
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5">
+                    {agent.kind === "workflow" && (
+                      <span className="rounded-full bg-indigo-500/12 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-indigo-400">builder</span>
+                    )}
                     {ENTITIES.map((e) => (
                       <span
                         key={e}
@@ -150,7 +175,7 @@ export default function Sidebar({
                         className={`h-1.5 w-1.5 rounded-full ${ACCESS_DOT[agent.capabilities[e]]}`}
                       />
                     ))}
-                    <span className="ml-1 truncate text-[10px] text-slate-500">
+                    <span className={`${agent.kind === "workflow" ? "" : "ml-1"} truncate text-[10px] text-slate-500`}>
                       {agent.model.replace("claude-", "")}
                     </span>
                   </div>

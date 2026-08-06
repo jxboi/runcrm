@@ -10,16 +10,18 @@ import {
   DEAL_STAGES,
   Entity,
   EntityRef,
+  SalesRep,
   Task,
 } from "@/lib/types";
 import { api, fmtMoney, fmtTime } from "@/lib/client";
 import RoutinesTab from "./RoutinesTab";
 
-type Tab = "contacts" | "deals" | "tasks" | "routines" | "activity";
+type Tab = "contacts" | "sales_reps" | "deals" | "tasks" | "routines" | "activity";
 type Section = "records" | "work" | "activity";
 
 const SECTION_FOR_TAB: Record<Tab, Section> = {
   contacts: "records",
+  sales_reps: "records",
   deals: "records",
   tasks: "work",
   routines: "work",
@@ -57,6 +59,7 @@ const TAB_FOR_ENTITY: Record<Entity, Tab> = {
   deals: "deals",
   tasks: "tasks",
   activities: "activity",
+  sales_reps: "sales_reps",
 };
 
 /**
@@ -153,9 +156,10 @@ export default function DataPanel({
   onError: (msg: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("contacts");
-  const [lastRecordsTab, setLastRecordsTab] = useState<"contacts" | "deals">("contacts");
+  const [lastRecordsTab, setLastRecordsTab] = useState<"contacts" | "sales_reps" | "deals">("contacts");
   const [lastWorkTab, setLastWorkTab] = useState<"tasks" | "routines">("tasks");
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [salesReps, setSalesReps] = useState<SalesRep[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -164,7 +168,7 @@ export default function DataPanel({
 
   const selectTab = useCallback((nextTab: Tab) => {
     setTab(nextTab);
-    if (nextTab === "contacts" || nextTab === "deals") setLastRecordsTab(nextTab);
+    if (nextTab === "contacts" || nextTab === "sales_reps" || nextTab === "deals") setLastRecordsTab(nextTab);
     if (nextTab === "tasks" || nextTab === "routines") setLastWorkTab(nextTab);
   }, []);
 
@@ -179,13 +183,15 @@ export default function DataPanel({
 
   const reload = useCallback(async () => {
     try {
-      const [c, d, t, a] = await Promise.all([
+      const [c, sr, d, t, a] = await Promise.all([
         api<Contact[]>("/api/contacts"),
+        api<SalesRep[]>("/api/sales-reps"),
         api<Deal[]>("/api/deals"),
         api<Task[]>("/api/tasks"),
         api<Activity[]>("/api/activities"),
       ]);
       setContacts(c);
+      setSalesReps(sr);
       setDeals(d);
       setTasks(t);
       setActivities(a);
@@ -213,6 +219,7 @@ export default function DataPanel({
     section === "records"
       ? [
           { id: "contacts", label: "Contacts", count: contacts.length },
+          { id: "sales_reps", label: "Sales reps", count: salesReps.length },
           { id: "deals", label: "Deals", count: deals.length },
         ]
       : section === "work"
@@ -330,16 +337,21 @@ export default function DataPanel({
           {tab === "contacts" && (
             <ContactsTab
               contacts={contacts}
+              salesReps={salesReps}
               focusedId={focusedId}
               onCreated={reload}
               onOpenAccountThread={onOpenAccountThread}
               onError={onError}
             />
           )}
+          {tab === "sales_reps" && (
+            <SalesRepsTab salesReps={salesReps} focusedId={focusedId} onCreated={reload} onError={onError} />
+          )}
           {tab === "deals" && (
             <DealsTab
               deals={deals}
               contacts={contacts}
+              salesReps={salesReps}
               focusedId={focusedId}
               onCreated={reload}
               onError={onError}
@@ -349,6 +361,7 @@ export default function DataPanel({
             <TasksTab
               tasks={tasks}
               agents={agents}
+              salesReps={salesReps}
               busyAgentIds={busyAgentIds}
               runningTaskId={runningTaskId}
               focusedId={focusedId}
@@ -378,24 +391,29 @@ export default function DataPanel({
 
 function ContactsTab({
   contacts,
+  salesReps,
   focusedId,
   onCreated,
   onOpenAccountThread,
   onError,
 }: {
   contacts: Contact[];
+  salesReps: SalesRep[];
   focusedId: string | null;
   onCreated: () => void;
   onOpenAccountThread: (accountName: string) => Promise<void>;
   onError: (m: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", company: "", status: "lead" });
+  const [form, setForm] = useState({ name: "", email: "", company: "", status: "lead", sales_rep_id: "" });
 
   const create = async () => {
     try {
-      await api("/api/contacts", { method: "POST", body: JSON.stringify(form) });
-      setForm({ name: "", email: "", company: "", status: "lead" });
+      await api("/api/contacts", {
+        method: "POST",
+        body: JSON.stringify({ ...form, sales_rep_id: form.sales_rep_id ? Number(form.sales_rep_id) : null }),
+      });
+      setForm({ name: "", email: "", company: "", status: "lead", sales_rep_id: "" });
       setShowForm(false);
       onCreated();
     } catch (e) {
@@ -445,6 +463,17 @@ function ContactsTab({
                 </option>
               ))}
             </select>
+            <select
+              value={form.sales_rep_id}
+              onChange={(e) => setForm({ ...form, sales_rep_id: e.target.value })}
+              aria-label="Sales rep"
+              className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+            >
+              <option value="">No sales rep</option>
+              {salesReps.map((salesRep) => (
+                <option key={salesRep.id} value={salesRep.id}>{salesRep.name}</option>
+              ))}
+            </select>
             <button
               onClick={create}
               disabled={!form.name.trim()}
@@ -482,6 +511,115 @@ function ContactsTab({
             </div>
           </div>
           {c.notes && <div className="mt-1.5 truncate text-[11px] italic text-slate-600">{c.notes}</div>}
+          <label className="mt-2 flex items-center gap-2 text-[10px] text-slate-500">
+            <span className="shrink-0">Sales rep</span>
+            <select
+              value={c.sales_rep_id ?? ""}
+              onChange={async (event) => {
+                try {
+                  await api(`/api/contacts/${c.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ sales_rep_id: event.target.value ? Number(event.target.value) : null }),
+                  });
+                  onCreated();
+                } catch (error) {
+                  onError(error instanceof Error ? error.message : "Failed to assign sales rep");
+                }
+              }}
+              className="min-w-0 flex-1 rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
+            >
+              <option value="">Unassigned</option>
+              {salesReps.map((salesRep) => (
+                <option key={salesRep.id} value={salesRep.id}>{salesRep.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------- sales reps ----------------
+
+function SalesRepsTab({
+  salesReps,
+  focusedId,
+  onCreated,
+  onError,
+}: {
+  salesReps: SalesRep[];
+  focusedId: string | null;
+  onCreated: () => void;
+  onError: (m: string) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "" });
+
+  const create = async () => {
+    try {
+      await api("/api/sales-reps", { method: "POST", body: JSON.stringify(form) });
+      setForm({ name: "", email: "", phone: "" });
+      setShowForm(false);
+      onCreated();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Failed to add sales rep");
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={() => setShowForm((shown) => !shown)}
+        className="w-full rounded-lg border border-dashed border-slate-700 py-1.5 text-xs text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
+      >
+        {showForm ? "Cancel" : "+ Add sales rep"}
+      </button>
+      {showForm && (
+        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+          <input
+            placeholder="Name *"
+            value={form.name}
+            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+          />
+          <div className="flex gap-2">
+            <input
+              placeholder="Email"
+              value={form.email}
+              onChange={(event) => setForm({ ...form, email: event.target.value })}
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            />
+            <input
+              placeholder="Phone"
+              value={form.phone}
+              onChange={(event) => setForm({ ...form, phone: event.target.value })}
+              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={create}
+            disabled={!form.name.trim()}
+            className="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
+          >
+            Add sales rep
+          </button>
+        </div>
+      )}
+      {salesReps.map((salesRep) => (
+        <div
+          key={salesRep.id}
+          data-record={`sales_reps-${salesRep.id}`}
+          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "sales_reps", salesRep.id)}`}
+        >
+          <div className="text-[13px] font-medium text-slate-200">{salesRep.name}</div>
+          <div className="mt-0.5 truncate text-[11px] text-slate-500">
+            {[salesRep.email, salesRep.phone].filter(Boolean).join(" · ") || "No contact details"}
+          </div>
+          <div className="mt-2 flex gap-3 text-[10px] text-slate-500">
+            <span>{Number(salesRep.contact_count ?? 0)} contacts</span>
+            <span>{Number(salesRep.won_deal_count ?? 0)} won · {fmtMoney(Number(salesRep.won_value ?? 0))}</span>
+          </div>
         </div>
       ))}
     </div>
@@ -493,18 +631,21 @@ function ContactsTab({
 function DealsTab({
   deals,
   contacts,
+  salesReps,
   focusedId,
   onCreated,
   onError,
 }: {
   deals: Deal[];
   contacts: Contact[];
+  salesReps: SalesRep[];
   focusedId: string | null;
   onCreated: () => void;
   onError: (m: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: "", value: "", contact_id: "", stage: "lead" });
+  const [closers, setClosers] = useState<Record<number, string>>({});
 
   const openValue = deals
     .filter((d) => d.stage !== "won" && d.stage !== "lost")
@@ -527,6 +668,24 @@ function DealsTab({
       onCreated();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to create deal");
+    }
+  };
+
+  const closeDeal = async (deal: Deal) => {
+    const contact = contacts.find((candidate) => candidate.id === deal.contact_id);
+    const salesRepId = closers[deal.id] || contact?.sales_rep_id?.toString() || "";
+    if (!salesRepId) {
+      onError("Choose a sales rep before closing the deal");
+      return;
+    }
+    try {
+      await api(`/api/deals/${deal.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ stage: "won", closed_by_sales_rep_id: Number(salesRepId) }),
+      });
+      onCreated();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Failed to close deal");
     }
   };
 
@@ -616,6 +775,33 @@ function DealsTab({
             </div>
           </div>
           {d.notes && <div className="mt-1.5 truncate text-[11px] italic text-slate-600">{d.notes}</div>}
+          {d.stage === "won" || d.stage === "lost" ? (
+            <div className="mt-2 text-[10px] text-slate-500">
+              Closed{d.closed_by_sales_rep_name ? ` by ${d.closed_by_sales_rep_name}` : ""}
+            </div>
+          ) : (
+            <div className="mt-2 flex gap-2">
+              <select
+                value={closers[d.id] ?? contacts.find((contact) => contact.id === d.contact_id)?.sales_rep_id ?? ""}
+                onChange={(event) => setClosers((current) => ({ ...current, [d.id]: event.target.value }))}
+                aria-label={`Sales rep closing ${d.title}`}
+                className="min-w-0 flex-1 rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
+              >
+                <option value="">Choose closer</option>
+                {salesReps.map((salesRep) => (
+                  <option key={salesRep.id} value={salesRep.id}>{salesRep.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void closeDeal(d)}
+                disabled={salesReps.length === 0}
+                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 transition enabled:hover:bg-emerald-500/20 disabled:opacity-40"
+              >
+                Close won
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -627,6 +813,7 @@ function DealsTab({
 function TasksTab({
   tasks,
   agents,
+  salesReps,
   busyAgentIds,
   runningTaskId,
   focusedId,
@@ -636,6 +823,7 @@ function TasksTab({
 }: {
   tasks: Task[];
   agents: Agent[];
+  salesReps: SalesRep[];
   busyAgentIds: number[];
   runningTaskId: number | null;
   focusedId: string | null;
@@ -644,7 +832,7 @@ function TasksTab({
   onError: (m: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", assignee: agents[0]?.id?.toString() ?? "" });
+  const [form, setForm] = useState({ title: "", description: "", assignee: agents[0] ? `agent:${agents[0].id}` : "" });
 
   const create = async () => {
     try {
@@ -653,7 +841,8 @@ function TasksTab({
         body: JSON.stringify({
           title: form.title,
           description: form.description || null,
-          assignee_agent_id: form.assignee ? Number(form.assignee) : null,
+          assignee_agent_id: form.assignee.startsWith("agent:") ? Number(form.assignee.slice(6)) : null,
+          assignee_sales_rep_id: form.assignee.startsWith("rep:") ? Number(form.assignee.slice(4)) : null,
         }),
       });
       setForm({ title: "", description: "", assignee: form.assignee });
@@ -694,11 +883,20 @@ function TasksTab({
               className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
             >
               <option value="">Unassigned</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.emoji} {a.name}
-                </option>
-              ))}
+              <optgroup label="AI agents">
+                {agents.map((a) => (
+                  <option key={a.id} value={`agent:${a.id}`}>
+                    {a.emoji} {a.name}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Sales reps">
+                {salesReps.map((salesRep) => (
+                  <option key={salesRep.id} value={`rep:${salesRep.id}`}>
+                    👤 {salesRep.name}
+                  </option>
+                ))}
+              </optgroup>
             </select>
             <button
               onClick={create}
@@ -728,7 +926,11 @@ function TasksTab({
                 <div className="mt-1.5 flex items-center gap-2">
                   <Pill text={isRunning ? "running" : t.status} map={TASK_PILL} />
                   <span className="text-[11px] text-slate-500">
-                    {t.assignee_name ? `${t.assignee_emoji ?? ""} ${t.assignee_name}` : "Unassigned"}
+                    {t.assignee_name
+                      ? `${t.assignee_emoji ?? ""} ${t.assignee_name}`
+                      : t.assignee_sales_rep_name
+                        ? `👤 ${t.assignee_sales_rep_name}`
+                        : "Unassigned"}
                   </span>
                 </div>
               </div>

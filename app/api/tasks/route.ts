@@ -5,7 +5,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  return NextResponse.json(await listTasks({ status: searchParams.get("status") ?? undefined }));
+  const salesRepId = searchParams.get("sales_rep_id");
+  return NextResponse.json(await listTasks({
+    status: searchParams.get("status") ?? undefined,
+    sales_rep_id: salesRepId ? Number(salesRepId) : undefined,
+  }));
 }
 
 export async function POST(req: NextRequest) {

@@ -1,6 +1,6 @@
 export type AccessLevel = "none" | "read" | "write";
 
-export const ENTITIES = ["contacts", "deals", "activities", "tasks"] as const;
+export const ENTITIES = ["contacts", "deals", "activities", "tasks", "sales_reps"] as const;
 export type Entity = (typeof ENTITIES)[number];
 
 /** For labelling a single record — "activities" doesn't singularise by dropping an "s". */
@@ -9,6 +9,7 @@ export const ENTITY_SINGULAR: Record<Entity, string> = {
   deals: "deal",
   activities: "activity",
   tasks: "task",
+  sales_reps: "sales rep",
 };
 
 export type Capabilities = Record<Entity, AccessLevel>;
@@ -20,15 +21,109 @@ export type Capabilities = Record<Entity, AccessLevel>;
  */
 export type Autonomy = "auto" | "ask";
 
+export type AgentKind = "general" | "workflow";
+
 export interface Agent {
   id: number;
   name: string;
   emoji: string;
+  /** Workflow agents receive the versioned workflow authoring toolset. */
+  kind: AgentKind;
   instructions: string;
   capabilities: Capabilities;
   autonomy: Autonomy;
   model: string;
   created_at: string;
+}
+
+export const WORKFLOW_STATUSES = ["draft", "active", "paused", "archived"] as const;
+export type WorkflowStatus = (typeof WORKFLOW_STATUSES)[number];
+
+export const WORKFLOW_NODE_KINDS = ["trigger", "condition", "action", "delay", "ai_agent"] as const;
+export type WorkflowNodeKind = (typeof WORKFLOW_NODE_KINDS)[number];
+
+/**
+ * Stable v1 workflow document. Versions store this whole value as JSON so a
+ * saved graph is immutable, portable, and easy to migrate as node types grow.
+ */
+export interface WorkflowDefinition {
+  schema_version: 1;
+  name: string;
+  description: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
+export interface WorkflowNode {
+  id: string;
+  kind: WorkflowNodeKind;
+  operation: string;
+  title: string;
+  description: string;
+  config: Record<string, unknown>;
+}
+
+export interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  /** Branch labels are normally "yes" / "no"; ordinary edges use "then". */
+  label: string;
+}
+
+export interface WorkflowValidationIssue {
+  level: "error" | "warning";
+  code: string;
+  message: string;
+  node_id?: string;
+}
+
+export interface Workflow {
+  id: number;
+  name: string;
+  description: string;
+  status: WorkflowStatus;
+  current_version: number;
+  definition: WorkflowDefinition;
+  validation: WorkflowValidationIssue[];
+  created_by_agent_id: number | null;
+  created_by_agent_name?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowVersion {
+  id: number;
+  workflow_id: number;
+  version: number;
+  definition: WorkflowDefinition;
+  change_summary: string;
+  agent_id: number | null;
+  agent_name?: string | null;
+  created_at: string;
+}
+
+export interface WorkflowRunStep {
+  node_id: string;
+  node_title: string;
+  kind: WorkflowNodeKind;
+  status: "succeeded" | "skipped" | "failed";
+  detail: string;
+}
+
+export interface WorkflowRun {
+  id: number;
+  workflow_id: number;
+  workflow_name?: string | null;
+  version: number;
+  status: "running" | "succeeded" | "failed";
+  trigger: "test" | "manual" | "event";
+  input: Record<string, unknown>;
+  trace: WorkflowRunStep[];
+  output: Record<string, unknown> | null;
+  error: string | null;
+  started_at: string;
+  completed_at: string | null;
 }
 
 export const PROPOSAL_STATUSES = ["pending", "approved", "rejected"] as const;
@@ -59,6 +154,8 @@ export interface Contact {
   email: string | null;
   phone: string | null;
   company: string | null;
+  sales_rep_id: number | null;
+  sales_rep_name?: string | null;
   status: ContactStatus;
   notes: string | null;
   created_at: string;
@@ -73,6 +170,9 @@ export interface Deal {
   title: string;
   contact_id: number | null;
   contact_name?: string | null;
+  closed_by_sales_rep_id: number | null;
+  closed_by_sales_rep_name?: string | null;
+  closed_at: string | null;
   value: number;
   stage: DealStage;
   notes: string | null;
@@ -103,12 +203,26 @@ export interface Task {
   title: string;
   description: string | null;
   assignee_agent_id: number | null;
+  assignee_sales_rep_id: number | null;
   assignee_name?: string | null;
   assignee_emoji?: string | null;
+  assignee_sales_rep_name?: string | null;
   status: TaskStatus;
   result: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SalesRep {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  created_at: string;
+  updated_at: string;
+  contact_count?: number;
+  won_deal_count?: number;
+  won_value?: number;
 }
 
 export type RoutineSchedule =

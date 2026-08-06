@@ -5,10 +5,19 @@ const schemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     emoji TEXT NOT NULL DEFAULT '🤖',
+    kind TEXT NOT NULL DEFAULT 'general',
     instructions TEXT NOT NULL DEFAULT '',
     capabilities TEXT NOT NULL DEFAULT '{}',
     model TEXT NOT NULL DEFAULT 'claude-opus-5',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS sales_reps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16,6 +25,7 @@ const schemaStatements = [
     email TEXT,
     phone TEXT,
     company TEXT,
+    sales_rep_id INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'lead',
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -25,6 +35,8 @@ const schemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+    closed_by_sales_rep_id INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL,
+    closed_at TEXT,
     value REAL NOT NULL DEFAULT 0,
     stage TEXT NOT NULL DEFAULT 'lead',
     notes TEXT,
@@ -45,6 +57,7 @@ const schemaStatements = [
     title TEXT NOT NULL,
     description TEXT,
     assignee_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    assignee_sales_rep_id INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'todo',
     result TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -126,7 +139,40 @@ const schemaStatements = [
     started_at TEXT NOT NULL DEFAULT (datetime('now')),
     completed_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS workflows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'draft',
+    current_version INTEGER NOT NULL DEFAULT 1,
+    created_by_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS workflow_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    definition TEXT NOT NULL,
+    change_summary TEXT NOT NULL DEFAULT 'Initial workflow',
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS workflow_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    trigger TEXT NOT NULL DEFAULT 'test',
+    input TEXT NOT NULL DEFAULT '{}',
+    trace TEXT NOT NULL DEFAULT '[]',
+    output TEXT,
+    error TEXT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  )`,
   "CREATE INDEX IF NOT EXISTS idx_contacts_updated_at ON contacts(updated_at)",
+  "CREATE INDEX IF NOT EXISTS idx_sales_reps_name ON sales_reps(name)",
   "CREATE INDEX IF NOT EXISTS idx_mutations_message_id ON mutations(message_id)",
   "CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status)",
   "CREATE INDEX IF NOT EXISTS idx_deals_updated_at ON deals(updated_at)",
@@ -137,6 +183,10 @@ const schemaStatements = [
   "CREATE INDEX IF NOT EXISTS idx_routines_due ON routines(enabled, archived_at, next_run_at)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_routine_runs_key ON routine_runs(run_key)",
   "CREATE INDEX IF NOT EXISTS idx_routine_runs_routine ON routine_runs(routine_id, started_at)",
+  "CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status, updated_at)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_versions_number ON workflow_versions(workflow_id, version)",
+  "CREATE INDEX IF NOT EXISTS idx_workflow_versions_workflow ON workflow_versions(workflow_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id, started_at)",
 ] as const;
 
 let ready: Promise<D1Database> | undefined;
@@ -159,7 +209,12 @@ export function ensureDb(): Promise<D1Database> {
  */
 const addedColumns: { table: string; column: string; definition: string }[] = [
   { table: "agents", column: "autonomy", definition: "TEXT NOT NULL DEFAULT 'auto'" },
+  { table: "agents", column: "kind", definition: "TEXT NOT NULL DEFAULT 'general'" },
   { table: "messages", column: "thread_id", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "contacts", column: "sales_rep_id", definition: "INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL" },
+  { table: "deals", column: "closed_by_sales_rep_id", definition: "INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL" },
+  { table: "deals", column: "closed_at", definition: "TEXT" },
+  { table: "tasks", column: "assignee_sales_rep_id", definition: "INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL" },
 ];
 
 async function applyColumnMigrations(db: D1Database) {
@@ -174,12 +229,40 @@ async function initializeDb(): Promise<D1Database> {
   const db = getDb();
   await db.batch(schemaStatements.map((sql) => db.prepare(sql)));
   await applyColumnMigrations(db);
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_contacts_sales_rep_id ON contacts(sales_rep_id)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_sales_reps_name ON sales_reps(name)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_deals_closed_by_sales_rep_id ON deals(closed_by_sales_rep_id)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_tasks_assignee_sales_rep_id ON tasks(assignee_sales_rep_id)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id, id)").run();
   await db.prepare("INSERT OR IGNORE INTO workspace_settings (id, timezone) VALUES (1, 'UTC')").run();
 
   const count = await db.prepare("SELECT COUNT(*) AS n FROM agents").first<{ n: number }>();
   if (!count?.n) await seed(db);
+  await ensureWorkflowAgent(db);
   return db;
+}
+
+async function ensureWorkflowAgent(db: D1Database) {
+  const existing = await db
+    .prepare("SELECT id, kind FROM agents WHERE kind = 'workflow' OR name = 'Workflow Architect' ORDER BY kind = 'workflow' DESC LIMIT 1")
+    .first<{ id: number; kind: string }>();
+  if (existing) {
+    if (existing.kind !== "workflow") {
+      await db.prepare("UPDATE agents SET kind = 'workflow' WHERE id = ?").bind(existing.id).run();
+    }
+    return;
+  }
+
+  await db
+    .prepare("INSERT INTO agents (name, emoji, kind, instructions, capabilities, autonomy, model) VALUES (?, ?, 'workflow', ?, ?, 'auto', ?)")
+    .bind(
+      "Workflow Architect",
+      "✦",
+      "Turn plain-language automation ideas into clear, safe, versioned workflows. Always save requested workflow changes with your workflow tools, explain assumptions briefly, and ask the user to inspect the visual preview. Never claim a draft is active unless the activation tool succeeded.",
+      JSON.stringify({ contacts: "read", deals: "read", activities: "read", tasks: "read" }),
+      "claude-opus-5"
+    )
+    .run();
 }
 
 async function seed(db: D1Database) {

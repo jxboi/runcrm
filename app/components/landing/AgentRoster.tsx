@@ -19,8 +19,9 @@ const caps = (
   contacts: AccessLevel,
   deals: AccessLevel,
   activities: AccessLevel,
-  tasks: AccessLevel
-): Capabilities => ({ contacts, deals, activities, tasks });
+  tasks: AccessLevel,
+  salesReps: AccessLevel = "read"
+): Capabilities => ({ contacts, deals, activities, tasks, sales_reps: salesReps });
 
 const ROSTER: Hire[] = [
   {
@@ -102,7 +103,7 @@ export default function AgentRoster() {
                   title={`${entity}: ${level}`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${DOT[level]}`} />
-                  {entity}
+                  {entity.replaceAll("_", " ")}
                 </span>
               );
             })}

@@ -1,21 +1,33 @@
 import {
   createContact,
   createDeal,
+  createSalesRep,
   createTask,
   getContact,
+  getSalesRep,
   listActivities,
   listAgents,
   listContacts,
   listDeals,
+  listSalesReps,
   listTasks,
   logActivity,
   updateContact,
   updateDeal,
+  updateSalesRep,
   updateTask,
 } from "../crm";
 import { ACTIVITY_TYPES, Agent, CONTACT_STATUSES, DEAL_STAGES, Entity, EntityRef, TASK_STATUSES } from "../types";
 import { journalMutation, refFor, snapshotRow } from "../mutations";
 import { createProposal } from "../proposals";
+import {
+  createWorkflow,
+  getWorkflow,
+  listWorkflows,
+  restoreWorkflowVersion,
+  reviseWorkflow,
+  setWorkflowStatus,
+} from "../workflows";
 import { nameKey } from "./mentions";
 
 // Plain JSON-schema tool definitions (Anthropic Messages API shape).
@@ -31,7 +43,7 @@ export interface ToolDef {
 
 interface ToolSpec {
   /** null for workspace tools that aren't gated on CRM access rights. */
-  entity: Entity | null;
+  entity: Entity | "workflows" | null;
   level: "read" | "write";
   def: ToolDef;
   run: (input: Record<string, unknown>, agent: Agent) => unknown | Promise<unknown>;
@@ -50,6 +62,70 @@ const num = (v: unknown): number | undefined =>
   v === null || v === undefined || v === "" ? undefined : Number(v);
 const str = (v: unknown): string | undefined =>
   v === null || v === undefined ? undefined : String(v);
+
+const WORKFLOW_DEFINITION_SCHEMA = {
+  type: "object",
+  description: "A complete v1 workflow graph. Revisions must send the entire graph, including unchanged nodes and edges.",
+  properties: {
+    schema_version: { type: "integer", enum: [1] },
+    name: { type: "string" },
+    description: { type: "string" },
+    nodes: {
+      type: "array",
+      minItems: 2,
+      maxItems: 30,
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Stable lowercase id such as lead_created or create_follow_up" },
+          kind: { type: "string", enum: ["trigger", "condition", "action", "delay", "ai_agent"] },
+          operation: {
+            type: "string",
+            description: "Built-ins: manual, record.created, record.updated, schedule.reached, branch.if, record.update, sales_rep.create, contact.assign_sales_rep, deal.close, task.create, activity.log, email.send, notification.send, wait.duration, agent.run",
+          },
+          title: { type: "string" },
+          description: { type: "string" },
+          config: {
+            type: "object",
+            description: "Operation settings. Conditions use field/operator/value; delays use duration; AI nodes use instructions. email.send requires to, subject, and body; values may use runtime placeholders such as {{record.email}}.",
+            additionalProperties: true,
+          },
+        },
+        required: ["id", "kind", "operation", "title", "description", "config"],
+        additionalProperties: false,
+      },
+    },
+    edges: {
+      type: "array",
+      maxItems: 60,
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          source: { type: "string" },
+          target: { type: "string" },
+          label: { type: "string", description: "Use then for normal edges and yes/no for the two condition branches" },
+        },
+        required: ["id", "source", "target", "label"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["schema_version", "name", "description", "nodes", "edges"],
+  additionalProperties: false,
+};
+
+function workflowResult(workflow: Awaited<ReturnType<typeof createWorkflow>>) {
+  return {
+    id: workflow.id,
+    name: workflow.name,
+    status: workflow.status,
+    current_version: workflow.current_version,
+    node_count: workflow.definition.nodes.length,
+    validation: workflow.validation,
+    note: "The saved version is now visible in Workflow Studio.",
+  };
+}
 
 const TOOL_SPECS: ToolSpec[] = [
   // ---- contacts ----
@@ -102,6 +178,7 @@ const TOOL_SPECS: ToolSpec[] = [
           email: { type: "string" },
           phone: { type: "string" },
           company: { type: "string" },
+          sales_rep_id: { type: "integer", description: "Sales rep who owns this contact" },
           status: { type: "string", enum: [...CONTACT_STATUSES], description: "Defaults to 'lead'" },
           notes: { type: "string" },
         },
@@ -114,6 +191,7 @@ const TOOL_SPECS: ToolSpec[] = [
         email: str(input.email),
         phone: str(input.phone),
         company: str(input.company),
+        sales_rep_id: num(input.sales_rep_id) ?? null,
         status: str(input.status),
         notes: str(input.notes),
       }),
@@ -132,6 +210,7 @@ const TOOL_SPECS: ToolSpec[] = [
           email: { type: "string" },
           phone: { type: "string" },
           company: { type: "string" },
+          sales_rep_id: { type: ["integer", "null"], description: "Assign or unassign the contact's sales rep" },
           status: { type: "string", enum: [...CONTACT_STATUSES] },
           notes: { type: "string" },
         },
@@ -144,6 +223,7 @@ const TOOL_SPECS: ToolSpec[] = [
         email: str(input.email),
         phone: str(input.phone),
         company: str(input.company),
+        sales_rep_id: input.sales_rep_id === null ? null : num(input.sales_rep_id),
         status: str(input.status) as never,
         notes: str(input.notes),
       }),
@@ -179,6 +259,7 @@ const TOOL_SPECS: ToolSpec[] = [
           value: { type: "number", description: "Deal value in USD" },
           stage: { type: "string", enum: [...DEAL_STAGES], description: "Defaults to 'lead'" },
           notes: { type: "string" },
+          closed_by_sales_rep_id: { type: "integer", description: "Sales rep who closed the deal; only valid for won or lost deals" },
         },
         required: ["title"],
       },
@@ -190,6 +271,7 @@ const TOOL_SPECS: ToolSpec[] = [
         value: num(input.value),
         stage: str(input.stage),
         notes: str(input.notes),
+        closed_by_sales_rep_id: num(input.closed_by_sales_rep_id) ?? null,
       }),
   },
   {
@@ -207,6 +289,7 @@ const TOOL_SPECS: ToolSpec[] = [
           value: { type: "number" },
           stage: { type: "string", enum: [...DEAL_STAGES] },
           notes: { type: "string" },
+          closed_by_sales_rep_id: { type: ["integer", "null"], description: "Sales rep who closed the deal; set stage to won or lost too" },
         },
         required: ["id"],
       },
@@ -218,6 +301,7 @@ const TOOL_SPECS: ToolSpec[] = [
         value: num(input.value),
         stage: str(input.stage) as never,
         notes: str(input.notes),
+        closed_by_sales_rep_id: input.closed_by_sales_rep_id === null ? null : num(input.closed_by_sales_rep_id),
       }),
   },
   // ---- activities ----
@@ -284,13 +368,14 @@ const TOOL_SPECS: ToolSpec[] = [
     level: "write",
     def: {
       name: "create_task",
-      description: "Create a task on the shared task board, optionally assigned to an agent by id.",
+      description: "Create a task on the shared task board, optionally assigned to one AI agent or one sales rep by id.",
       input_schema: {
         type: "object",
         properties: {
           title: { type: "string" },
           description: { type: "string" },
           assignee_agent_id: { type: "integer" },
+          assignee_sales_rep_id: { type: "integer" },
         },
         required: ["title"],
       },
@@ -300,6 +385,7 @@ const TOOL_SPECS: ToolSpec[] = [
         title: String(input.title ?? ""),
         description: str(input.description),
         assignee_agent_id: num(input.assignee_agent_id) ?? null,
+        assignee_sales_rep_id: num(input.assignee_sales_rep_id) ?? null,
       }),
   },
   {
@@ -307,7 +393,7 @@ const TOOL_SPECS: ToolSpec[] = [
     level: "write",
     def: {
       name: "update_task",
-      description: "Update a task's status, result, title, or description.",
+      description: "Update a task's status, result, title, description, or assignee.",
       input_schema: {
         type: "object",
         properties: {
@@ -316,6 +402,8 @@ const TOOL_SPECS: ToolSpec[] = [
           description: { type: "string" },
           status: { type: "string", enum: [...TASK_STATUSES] },
           result: { type: "string" },
+          assignee_agent_id: { type: ["integer", "null"] },
+          assignee_sales_rep_id: { type: ["integer", "null"] },
         },
         required: ["id"],
       },
@@ -326,7 +414,189 @@ const TOOL_SPECS: ToolSpec[] = [
         description: str(input.description),
         status: str(input.status) as never,
         result: str(input.result),
+        assignee_agent_id: input.assignee_agent_id === null ? null : num(input.assignee_agent_id),
+        assignee_sales_rep_id: input.assignee_sales_rep_id === null ? null : num(input.assignee_sales_rep_id),
       }),
+  },
+  // ---- sales reps ----
+  {
+    entity: "sales_reps",
+    level: "read",
+    def: {
+      name: "list_sales_reps",
+      description: "List sales reps with their assigned-contact count and won-deal performance.",
+      input_schema: { type: "object", properties: {} },
+    },
+    run: () => listSalesReps(),
+  },
+  {
+    entity: "sales_reps",
+    level: "read",
+    def: {
+      name: "get_sales_rep",
+      description: "Get one sales rep by id, including summary counts.",
+      input_schema: {
+        type: "object",
+        properties: { id: { type: "integer" } },
+        required: ["id"],
+      },
+    },
+    run: async (input) => {
+      const salesRep = await getSalesRep(Number(input.id));
+      if (!salesRep) throw new Error(`Sales rep ${input.id} not found`);
+      return salesRep;
+    },
+  },
+  {
+    entity: "sales_reps",
+    level: "write",
+    def: {
+      name: "create_sales_rep",
+      description: "Create a sales rep who can own contacts, close deals, and receive tasks.",
+      input_schema: {
+        type: "object",
+        properties: { name: { type: "string" }, email: { type: "string" }, phone: { type: "string" } },
+        required: ["name"],
+      },
+    },
+    run: (input) => createSalesRep({ name: String(input.name ?? ""), email: str(input.email), phone: str(input.phone) }),
+  },
+  {
+    entity: "sales_reps",
+    level: "write",
+    def: {
+      name: "update_sales_rep",
+      description: "Update a sales rep's name or contact details.",
+      input_schema: {
+        type: "object",
+        properties: { id: { type: "integer" }, name: { type: "string" }, email: { type: "string" }, phone: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    run: (input) => updateSalesRep(Number(input.id), { name: str(input.name), email: str(input.email), phone: str(input.phone) }),
+  },
+  // ---- workflows (only the built-in Workflow Architect receives these) ----
+  {
+    entity: "workflows",
+    level: "read",
+    def: {
+      name: "list_workflows",
+      description: "List saved workflows with ids, status, version, validation summary, and node counts.",
+      input_schema: {
+        type: "object",
+        properties: { include_archived: { type: "boolean" } },
+      },
+    },
+    run: async (input) => (await listWorkflows({ includeArchived: Boolean(input.include_archived) })).map((workflow) => ({
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description,
+      status: workflow.status,
+      current_version: workflow.current_version,
+      node_count: workflow.definition.nodes.length,
+      validation: workflow.validation,
+      updated_at: workflow.updated_at,
+    })),
+  },
+  {
+    entity: "workflows",
+    level: "read",
+    def: {
+      name: "get_workflow",
+      description: "Read a workflow's complete current definition before revising it. Always use its current_version as expected_version.",
+      input_schema: {
+        type: "object",
+        properties: { workflow_id: { type: "integer" } },
+        required: ["workflow_id"],
+      },
+    },
+    run: async (input) => {
+      const workflow = await getWorkflow(Number(input.workflow_id));
+      if (!workflow) throw new Error(`Workflow ${input.workflow_id} not found`);
+      return workflow;
+    },
+  },
+  {
+    entity: "workflows",
+    level: "write",
+    def: {
+      name: "create_workflow",
+      description: "Create and save a new draft workflow. The saved graph appears immediately in the user's visual preview.",
+      input_schema: {
+        type: "object",
+        properties: {
+          definition: WORKFLOW_DEFINITION_SCHEMA,
+          change_summary: { type: "string", description: "Short description of what this first version establishes" },
+        },
+        required: ["definition", "change_summary"],
+      },
+    },
+    run: async (input, agent) => workflowResult(await createWorkflow({ definition: input.definition, changeSummary: String(input.change_summary ?? "Initial workflow"), agentId: agent.id })),
+  },
+  {
+    entity: "workflows",
+    level: "write",
+    def: {
+      name: "revise_workflow",
+      description: "Save a complete replacement definition as the next immutable version. Read the workflow first and preserve everything the user did not ask to change.",
+      input_schema: {
+        type: "object",
+        properties: {
+          workflow_id: { type: "integer" },
+          expected_version: { type: "integer", description: "The current_version returned by get_workflow" },
+          definition: WORKFLOW_DEFINITION_SCHEMA,
+          change_summary: { type: "string", description: "Concise user-facing summary of this revision" },
+        },
+        required: ["workflow_id", "expected_version", "definition", "change_summary"],
+      },
+    },
+    run: async (input, agent) => workflowResult(await reviseWorkflow({
+        id: Number(input.workflow_id),
+        expectedVersion: Number(input.expected_version),
+        definition: input.definition,
+        changeSummary: String(input.change_summary ?? "Updated workflow"),
+        agentId: agent.id,
+      })),
+  },
+  {
+    entity: "workflows",
+    level: "write",
+    def: {
+      name: "restore_workflow_version",
+      description: "Copy an older saved definition into a new current version. Use this when the user asks to undo or return to a previous workflow version.",
+      input_schema: {
+        type: "object",
+        properties: {
+          workflow_id: { type: "integer" },
+          version: { type: "integer", description: "Older version to restore" },
+          expected_version: { type: "integer", description: "Current version, used to prevent overwriting a newer edit" },
+        },
+        required: ["workflow_id", "version", "expected_version"],
+      },
+    },
+    run: async (input, agent) => workflowResult(await restoreWorkflowVersion({
+        workflowId: Number(input.workflow_id),
+        version: Number(input.version),
+        expectedVersion: Number(input.expected_version),
+        agentId: agent.id,
+      })),
+  },
+  {
+    entity: "workflows",
+    level: "write",
+    def: {
+      name: "set_workflow_status",
+      description: "Activate, pause, return to draft, or archive a workflow only when the user explicitly asks. Activation is rejected if validation has errors.",
+      input_schema: {
+        type: "object",
+        properties: {
+          workflow_id: { type: "integer" },
+          status: { type: "string", enum: ["draft", "active", "paused", "archived"] },
+        },
+        required: ["workflow_id", "status"],
+      },
+    },
+    run: async (input) => workflowResult(await setWorkflowStatus(Number(input.workflow_id), String(input.status) as never)),
   },
   // ---- workspace ----
   {
@@ -368,6 +638,7 @@ const TOOL_SPECS: ToolSpec[] = [
 function allowed(agent: Agent, spec: ToolSpec): boolean {
   // Workspace tools (handoff) aren't tied to an entity — every agent gets them.
   if (spec.entity === null) return true;
+  if (spec.entity === "workflows") return agent.kind === "workflow";
   const level = agent.capabilities[spec.entity];
   if (spec.level === "read") return level === "read" || level === "write";
   return level === "write";
@@ -417,8 +688,9 @@ export async function executeTool(
   const spec = TOOL_SPECS.find((s) => s.def.name === name);
   if (!spec) return { result: `Unknown tool: ${name}`, ok: false };
   if (!allowed(agent, spec)) {
+    const access = spec.entity === "workflows" ? agent.kind : agent.capabilities[spec.entity!];
     return {
-      result: `Permission denied: ${agent.name} has "${agent.capabilities[spec.entity!]}" access to ${spec.entity}, but ${name} requires "${spec.level}". Consider handing this to an agent who has it.`,
+      result: `Permission denied: ${agent.name} has "${access}" access to ${spec.entity}, but ${name} requires "${spec.level}". Consider handing this to the Workflow Architect.`,
       ok: false,
     };
   }
@@ -428,7 +700,7 @@ export async function executeTool(
   // after the access check, so a proposal cannot ask for more than the agent
   // was already allowed to do.
   const requiresApproval = ALWAYS_REQUIRE_APPROVAL.has(name) || agent.autonomy === "ask";
-  if (requiresApproval && spec.level === "write" && spec.entity && !options.skipApproval) {
+  if (requiresApproval && spec.level === "write" && spec.entity && spec.entity !== "workflows" && !options.skipApproval) {
     const proposalId = await createProposal({ agentId: agent.id, tool: name, input: input ?? {} });
     return {
       result: `Filed proposal #${proposalId} for approval — ${name} was NOT executed. The user will approve or reject it. Do not retry this call or try another way around it; tell the user what you proposed and move on.`,
@@ -440,8 +712,9 @@ export async function executeTool(
   try {
     // Snapshot before the write so the journal can put the row back. Updates
     // carry the target id in their input; creates have nothing to snapshot.
-    const targetId = spec.level === "write" && spec.entity ? num(input?.id) : undefined;
-    const before = targetId ? await snapshotRow(spec.entity!, targetId) : null;
+    const isCrmWrite = spec.level === "write" && spec.entity != null && spec.entity !== "workflows";
+    const targetId = isCrmWrite ? num(input?.id) : undefined;
+    const before = targetId ? await snapshotRow(spec.entity as Entity, targetId) : null;
 
     const out = await spec.run(input ?? {}, agent);
     let json = JSON.stringify(out ?? null);
@@ -449,16 +722,17 @@ export async function executeTool(
 
     const outcome: ToolOutcome = { result: json, ok: true };
 
-    if (spec.level === "write" && spec.entity) {
+    if (isCrmWrite) {
       const writtenId = num((out as { id?: unknown } | null)?.id);
       if (writtenId) {
-        const after = await snapshotRow(spec.entity, writtenId);
-        outcome.refs = [refFor(spec.entity, writtenId, after)];
+        const crmEntity = spec.entity as Entity;
+        const after = await snapshotRow(crmEntity, writtenId);
+        outcome.refs = [refFor(crmEntity, writtenId, after)];
         outcome.mutationIds = [
           await journalMutation({
             agentId: agent.id,
             tool: name,
-            entity: spec.entity,
+            entity: crmEntity,
             entityId: writtenId,
             before,
             after,

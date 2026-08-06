@@ -11,6 +11,7 @@ import {
   Deal,
   DEAL_STAGES,
   ENTITIES,
+  SalesRep,
   Task,
   TASK_STATUSES,
   TraceEntry,
@@ -30,7 +31,7 @@ function rowToThread(row: Record<string, unknown>): ChatThread {
 }
 
 function rowToAgent(row: Record<string, unknown>): Agent {
-  const caps: Capabilities = { contacts: "none", deals: "none", activities: "none", tasks: "none" };
+  const caps: Capabilities = { contacts: "none", deals: "none", activities: "none", tasks: "none", sales_reps: "none" };
   try {
     const parsed = JSON.parse(String(row.capabilities || "{}"));
     for (const e of ENTITIES) {
@@ -41,6 +42,7 @@ function rowToAgent(row: Record<string, unknown>): Agent {
     id: Number(row.id),
     name: String(row.name),
     emoji: String(row.emoji),
+    kind: row.kind === "workflow" ? "workflow" : "general",
     instructions: String(row.instructions),
     capabilities: caps,
     autonomy: row.autonomy === "ask" ? "ask" : "auto",
@@ -129,7 +131,7 @@ export async function getAgent(id: number): Promise<Agent | null> {
 export async function createAgent(input: {
   name: string; emoji?: string; instructions?: string; capabilities?: Partial<Capabilities>; autonomy?: string; model?: string;
 }): Promise<Agent> {
-  const caps: Capabilities = { contacts: "none", deals: "none", activities: "none", tasks: "none" };
+  const caps: Capabilities = { contacts: "none", deals: "none", activities: "none", tasks: "none", sales_reps: "none" };
   for (const e of ENTITIES) {
     const value = input.capabilities?.[e];
     if (value === "read" || value === "write") caps[e] = value;
@@ -165,28 +167,67 @@ export async function updateAgent(id: number, input: {
 }
 
 export async function deleteAgent(id: number): Promise<boolean> {
+  const agent = await getAgent(id);
+  if (agent?.kind === "workflow") throw new Error("The Workflow Architect is a built-in workspace agent and cannot be deleted.");
   await run("UPDATE routines SET enabled = 0, next_run_at = NULL, lock_token = NULL, locked_at = NULL, updated_at = datetime('now') WHERE agent_id = ?", [id]);
   return (await run("DELETE FROM agents WHERE id = ?", [id])).meta.changes > 0;
 }
 
-export async function listContacts(filter?: { query?: string; status?: string }): Promise<Contact[]> {
+const SALES_REP_SELECT = `SELECT sr.*,
+  (SELECT COUNT(*) FROM contacts c WHERE c.sales_rep_id = sr.id) AS contact_count,
+  (SELECT COUNT(*) FROM deals d WHERE d.closed_by_sales_rep_id = sr.id AND d.stage = 'won') AS won_deal_count,
+  (SELECT COALESCE(SUM(d.value), 0) FROM deals d WHERE d.closed_by_sales_rep_id = sr.id AND d.stage = 'won') AS won_value
+  FROM sales_reps sr`;
+
+export async function listSalesReps(): Promise<SalesRep[]> {
+  return all<SalesRep>(`${SALES_REP_SELECT} ORDER BY sr.name COLLATE NOCASE, sr.id`);
+}
+
+export async function getSalesRep(id: number): Promise<SalesRep | null> {
+  return first<SalesRep>(`${SALES_REP_SELECT} WHERE sr.id = ?`, [id]);
+}
+
+export async function createSalesRep(input: { name: string; email?: string | null; phone?: string | null }): Promise<SalesRep> {
+  if (!input.name?.trim()) throw new Error("Sales rep name is required");
+  const result = await run("INSERT INTO sales_reps (name, email, phone) VALUES (?, ?, ?)", [
+    input.name.trim(), input.email?.trim() || null, input.phone?.trim() || null,
+  ]);
+  return (await getSalesRep(Number(result.meta.last_row_id)))!;
+}
+
+export async function updateSalesRep(id: number, input: Partial<Pick<SalesRep, "name" | "email" | "phone">>): Promise<SalesRep> {
+  const existing = await getSalesRep(id);
+  if (!existing) throw new Error(`Sales rep ${id} not found`);
+  const name = input.name === undefined ? existing.name : input.name.trim();
+  if (!name) throw new Error("Sales rep name is required");
+  await run("UPDATE sales_reps SET name = ?, email = ?, phone = ?, updated_at = datetime('now') WHERE id = ?", [
+    name,
+    input.email === undefined ? existing.email : input.email?.trim() || null,
+    input.phone === undefined ? existing.phone : input.phone?.trim() || null,
+    id,
+  ]);
+  return (await getSalesRep(id))!;
+}
+
+export async function listContacts(filter?: { query?: string; status?: string; sales_rep_id?: number }): Promise<Contact[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (filter?.query) {
-    clauses.push("(name LIKE ? OR company LIKE ? OR email LIKE ?)");
+    clauses.push("(c.name LIKE ? OR c.company LIKE ? OR c.email LIKE ?)");
     const query = `%${filter.query}%`;
     params.push(query, query, query);
   }
   if (filter?.status && (CONTACT_STATUSES as readonly string[]).includes(filter.status)) {
-    clauses.push("status = ?");
+    clauses.push("c.status = ?");
     params.push(filter.status);
   }
+  if (filter?.sales_rep_id) { clauses.push("c.sales_rep_id = ?"); params.push(filter.sales_rep_id); }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return all<Contact>(`SELECT * FROM contacts ${where} ORDER BY updated_at DESC`, params);
+  return all<Contact>(`SELECT c.*, sr.name AS sales_rep_name FROM contacts c LEFT JOIN sales_reps sr ON sr.id = c.sales_rep_id ${where} ORDER BY c.updated_at DESC`, params);
 }
 
 export async function getContact(id: number): Promise<(Contact & { deals: Deal[]; activities: Activity[] }) | null> {
-  const contact = await first<Contact>("SELECT * FROM contacts WHERE id = ?", [id]);
+  const contact = await first<Contact>("SELECT c.*, sr.name AS sales_rep_name FROM contacts c LEFT JOIN sales_reps sr ON sr.id = c.sales_rep_id WHERE c.id = ?", [id]);
   if (!contact) return null;
   const [deals, activities] = await Promise.all([
     all<Deal>("SELECT * FROM deals WHERE contact_id = ? ORDER BY updated_at DESC", [id]),
@@ -196,32 +237,35 @@ export async function getContact(id: number): Promise<(Contact & { deals: Deal[]
 }
 
 export async function createContact(input: {
-  name: string; email?: string | null; phone?: string | null; company?: string | null; status?: string; notes?: string | null;
+  name: string; email?: string | null; phone?: string | null; company?: string | null; sales_rep_id?: number | null; status?: string; notes?: string | null;
 }): Promise<Contact> {
   if (!input.name?.trim()) throw new Error("Contact name is required");
   const status = (CONTACT_STATUSES as readonly string[]).includes(input.status ?? "") ? input.status! : "lead";
-  const result = await run("INSERT INTO contacts (name, email, phone, company, status, notes) VALUES (?, ?, ?, ?, ?, ?)", [
-    input.name.trim(), input.email ?? null, input.phone ?? null, input.company ?? null, status, input.notes ?? null,
+  if (input.sales_rep_id != null && !(await getSalesRep(input.sales_rep_id))) throw new Error(`Sales rep ${input.sales_rep_id} not found`);
+  const result = await run("INSERT INTO contacts (name, email, phone, company, sales_rep_id, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+    input.name.trim(), input.email ?? null, input.phone ?? null, input.company ?? null, input.sales_rep_id ?? null, status, input.notes ?? null,
   ]);
-  return (await first<Contact>("SELECT * FROM contacts WHERE id = ?", [result.meta.last_row_id]))!;
+  return (await getContact(Number(result.meta.last_row_id)))!;
 }
 
-export async function updateContact(id: number, input: Partial<Pick<Contact, "name" | "email" | "phone" | "company" | "status" | "notes">>): Promise<Contact> {
+export async function updateContact(id: number, input: Partial<Pick<Contact, "name" | "email" | "phone" | "company" | "sales_rep_id" | "status" | "notes">>): Promise<Contact> {
   const existing = await first<Contact>("SELECT * FROM contacts WHERE id = ?", [id]);
   if (!existing) throw new Error(`Contact ${id} not found`);
   if (input.status && !(CONTACT_STATUSES as readonly string[]).includes(input.status)) {
     throw new Error(`Invalid status "${input.status}". Valid: ${CONTACT_STATUSES.join(", ")}`);
   }
-  await run("UPDATE contacts SET name = ?, email = ?, phone = ?, company = ?, status = ?, notes = ?, updated_at = datetime('now') WHERE id = ?", [
+  if (input.sales_rep_id != null && !(await getSalesRep(input.sales_rep_id))) throw new Error(`Sales rep ${input.sales_rep_id} not found`);
+  await run("UPDATE contacts SET name = ?, email = ?, phone = ?, company = ?, sales_rep_id = ?, status = ?, notes = ?, updated_at = datetime('now') WHERE id = ?", [
     input.name ?? existing.name,
     input.email !== undefined ? input.email : existing.email,
     input.phone !== undefined ? input.phone : existing.phone,
     input.company !== undefined ? input.company : existing.company,
+    input.sales_rep_id !== undefined ? input.sales_rep_id : existing.sales_rep_id,
     input.status ?? existing.status,
     input.notes !== undefined ? input.notes : existing.notes,
     id,
   ]);
-  return (await first<Contact>("SELECT * FROM contacts WHERE id = ?", [id]))!;
+  return (await getContact(id))!;
 }
 
 export async function listDeals(filter?: { stage?: string; contact_id?: number }): Promise<Deal[]> {
@@ -230,35 +274,45 @@ export async function listDeals(filter?: { stage?: string; contact_id?: number }
   if (filter?.stage && (DEAL_STAGES as readonly string[]).includes(filter.stage)) { clauses.push("d.stage = ?"); params.push(filter.stage); }
   if (filter?.contact_id) { clauses.push("d.contact_id = ?"); params.push(filter.contact_id); }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return all<Deal>(`SELECT d.*, c.name AS contact_name FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id ${where} ORDER BY d.updated_at DESC`, params);
+  return all<Deal>(`SELECT d.*, c.name AS contact_name, sr.name AS closed_by_sales_rep_name FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id LEFT JOIN sales_reps sr ON sr.id = d.closed_by_sales_rep_id ${where} ORDER BY d.updated_at DESC`, params);
 }
 
 export async function createDeal(input: {
-  title: string; contact_id?: number | null; value?: number; stage?: string; notes?: string | null;
+  title: string; contact_id?: number | null; value?: number; stage?: string; notes?: string | null; closed_by_sales_rep_id?: number | null;
 }): Promise<Deal> {
   if (!input.title?.trim()) throw new Error("Deal title is required");
   if (input.contact_id != null && !(await first("SELECT id FROM contacts WHERE id = ?", [input.contact_id]))) throw new Error(`Contact ${input.contact_id} not found`);
   const stage = (DEAL_STAGES as readonly string[]).includes(input.stage ?? "") ? input.stage! : "lead";
-  const result = await run("INSERT INTO deals (title, contact_id, value, stage, notes) VALUES (?, ?, ?, ?, ?)", [
+  if (input.closed_by_sales_rep_id != null && !(await getSalesRep(input.closed_by_sales_rep_id))) throw new Error(`Sales rep ${input.closed_by_sales_rep_id} not found`);
+  if (input.closed_by_sales_rep_id != null && stage !== "won" && stage !== "lost") throw new Error("A deal can only have a closing sales rep when it is won or lost");
+  const result = await run("INSERT INTO deals (title, contact_id, value, stage, notes, closed_by_sales_rep_id, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
     input.title.trim(), input.contact_id ?? null, Number(input.value) || 0, stage, input.notes ?? null,
+    input.closed_by_sales_rep_id ?? null, stage === "won" || stage === "lost" ? new Date().toISOString() : null,
   ]);
-  return (await first<Deal>("SELECT d.*, c.name AS contact_name FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id WHERE d.id = ?", [result.meta.last_row_id]))!;
+  return (await first<Deal>("SELECT d.*, c.name AS contact_name, sr.name AS closed_by_sales_rep_name FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id LEFT JOIN sales_reps sr ON sr.id = d.closed_by_sales_rep_id WHERE d.id = ?", [result.meta.last_row_id]))!;
 }
 
-export async function updateDeal(id: number, input: Partial<Pick<Deal, "title" | "contact_id" | "value" | "stage" | "notes">>): Promise<Deal> {
+export async function updateDeal(id: number, input: Partial<Pick<Deal, "title" | "contact_id" | "value" | "stage" | "notes" | "closed_by_sales_rep_id">>): Promise<Deal> {
   const existing = await first<Deal>("SELECT * FROM deals WHERE id = ?", [id]);
   if (!existing) throw new Error(`Deal ${id} not found`);
   if (input.stage && !(DEAL_STAGES as readonly string[]).includes(input.stage)) throw new Error(`Invalid stage "${input.stage}". Valid: ${DEAL_STAGES.join(", ")}`);
   if (input.contact_id != null && !(await first("SELECT id FROM contacts WHERE id = ?", [input.contact_id]))) throw new Error(`Contact ${input.contact_id} not found`);
-  await run("UPDATE deals SET title = ?, contact_id = ?, value = ?, stage = ?, notes = ?, updated_at = datetime('now') WHERE id = ?", [
+  if (input.closed_by_sales_rep_id != null && !(await getSalesRep(input.closed_by_sales_rep_id))) throw new Error(`Sales rep ${input.closed_by_sales_rep_id} not found`);
+  const stage = input.stage ?? existing.stage;
+  const closer = input.closed_by_sales_rep_id !== undefined ? input.closed_by_sales_rep_id : existing.closed_by_sales_rep_id;
+  if (closer != null && stage !== "won" && stage !== "lost") throw new Error("A deal can only have a closing sales rep when it is won or lost");
+  const closedAt = stage === "won" || stage === "lost" ? existing.closed_at ?? new Date().toISOString() : null;
+  await run("UPDATE deals SET title = ?, contact_id = ?, value = ?, stage = ?, notes = ?, closed_by_sales_rep_id = ?, closed_at = ?, updated_at = datetime('now') WHERE id = ?", [
     input.title ?? existing.title,
     input.contact_id !== undefined ? input.contact_id : existing.contact_id,
     input.value !== undefined ? Number(input.value) || 0 : existing.value,
-    input.stage ?? existing.stage,
+    stage,
     input.notes !== undefined ? input.notes : existing.notes,
+    stage === "won" || stage === "lost" ? closer : null,
+    closedAt,
     id,
   ]);
-  return (await first<Deal>("SELECT d.*, c.name AS contact_name FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id WHERE d.id = ?", [id]))!;
+  return (await first<Deal>("SELECT d.*, c.name AS contact_name, sr.name AS closed_by_sales_rep_name FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id LEFT JOIN sales_reps sr ON sr.id = d.closed_by_sales_rep_id WHERE d.id = ?", [id]))!;
 }
 
 export async function listActivities(filter?: { contact_id?: number; deal_id?: number; limit?: number }): Promise<Activity[]> {
@@ -284,34 +338,44 @@ export async function logActivity(input: {
   return (await first<Activity>("SELECT a.*, c.name AS contact_name, d.title AS deal_title FROM activities a LEFT JOIN contacts c ON c.id = a.contact_id LEFT JOIN deals d ON d.id = a.deal_id WHERE a.id = ?", [result.meta.last_row_id]))!;
 }
 
-export async function listTasks(filter?: { status?: string }): Promise<Task[]> {
+export async function listTasks(filter?: { status?: string; sales_rep_id?: number }): Promise<Task[]> {
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (filter?.status && (TASK_STATUSES as readonly string[]).includes(filter.status)) { clauses.push("t.status = ?"); params.push(filter.status); }
+  if (filter?.sales_rep_id) { clauses.push("t.assignee_sales_rep_id = ?"); params.push(filter.sales_rep_id); }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  return all<Task>(`SELECT t.*, a.name AS assignee_name, a.emoji AS assignee_emoji FROM tasks t LEFT JOIN agents a ON a.id = t.assignee_agent_id ${where} ORDER BY t.id DESC`, params);
+  return all<Task>(`SELECT t.*, a.name AS assignee_name, a.emoji AS assignee_emoji, sr.name AS assignee_sales_rep_name FROM tasks t LEFT JOIN agents a ON a.id = t.assignee_agent_id LEFT JOIN sales_reps sr ON sr.id = t.assignee_sales_rep_id ${where} ORDER BY t.id DESC`, params);
 }
 
 export async function getTask(id: number): Promise<Task | null> {
-  return first<Task>("SELECT t.*, a.name AS assignee_name, a.emoji AS assignee_emoji FROM tasks t LEFT JOIN agents a ON a.id = t.assignee_agent_id WHERE t.id = ?", [id]);
+  return first<Task>("SELECT t.*, a.name AS assignee_name, a.emoji AS assignee_emoji, sr.name AS assignee_sales_rep_name FROM tasks t LEFT JOIN agents a ON a.id = t.assignee_agent_id LEFT JOIN sales_reps sr ON sr.id = t.assignee_sales_rep_id WHERE t.id = ?", [id]);
 }
 
-export async function createTask(input: { title: string; description?: string | null; assignee_agent_id?: number | null }): Promise<Task> {
+export async function createTask(input: { title: string; description?: string | null; assignee_agent_id?: number | null; assignee_sales_rep_id?: number | null }): Promise<Task> {
   if (!input.title?.trim()) throw new Error("Task title is required");
+  if (input.assignee_agent_id != null && input.assignee_sales_rep_id != null) throw new Error("A task can only have one assignee");
   if (input.assignee_agent_id != null && !(await getAgent(input.assignee_agent_id))) throw new Error(`Agent ${input.assignee_agent_id} not found`);
-  const result = await run("INSERT INTO tasks (title, description, assignee_agent_id) VALUES (?, ?, ?)", [input.title.trim(), input.description ?? null, input.assignee_agent_id ?? null]);
+  if (input.assignee_sales_rep_id != null && !(await getSalesRep(input.assignee_sales_rep_id))) throw new Error(`Sales rep ${input.assignee_sales_rep_id} not found`);
+  const result = await run("INSERT INTO tasks (title, description, assignee_agent_id, assignee_sales_rep_id) VALUES (?, ?, ?, ?)", [input.title.trim(), input.description ?? null, input.assignee_agent_id ?? null, input.assignee_sales_rep_id ?? null]);
   return (await getTask(Number(result.meta.last_row_id)))!;
 }
 
-export async function updateTask(id: number, input: Partial<Pick<Task, "title" | "description" | "assignee_agent_id" | "status" | "result">>): Promise<Task> {
+export async function updateTask(id: number, input: Partial<Pick<Task, "title" | "description" | "assignee_agent_id" | "assignee_sales_rep_id" | "status" | "result">>): Promise<Task> {
   const existing = await getTask(id);
   if (!existing) throw new Error(`Task ${id} not found`);
   if (input.status && !(TASK_STATUSES as readonly string[]).includes(input.status)) throw new Error(`Invalid status "${input.status}". Valid: ${TASK_STATUSES.join(", ")}`);
   if (input.assignee_agent_id != null && !(await getAgent(input.assignee_agent_id))) throw new Error(`Agent ${input.assignee_agent_id} not found`);
-  await run("UPDATE tasks SET title = ?, description = ?, assignee_agent_id = ?, status = ?, result = ?, updated_at = datetime('now') WHERE id = ?", [
+  if (input.assignee_sales_rep_id != null && !(await getSalesRep(input.assignee_sales_rep_id))) throw new Error(`Sales rep ${input.assignee_sales_rep_id} not found`);
+  let assigneeAgentId = input.assignee_agent_id !== undefined ? input.assignee_agent_id : existing.assignee_agent_id;
+  let assigneeSalesRepId = input.assignee_sales_rep_id !== undefined ? input.assignee_sales_rep_id : existing.assignee_sales_rep_id;
+  if (input.assignee_agent_id != null) assigneeSalesRepId = null;
+  if (input.assignee_sales_rep_id != null) assigneeAgentId = null;
+  if (assigneeAgentId != null && assigneeSalesRepId != null) throw new Error("A task can only have one assignee");
+  await run("UPDATE tasks SET title = ?, description = ?, assignee_agent_id = ?, assignee_sales_rep_id = ?, status = ?, result = ?, updated_at = datetime('now') WHERE id = ?", [
     input.title ?? existing.title,
     input.description !== undefined ? input.description : existing.description,
-    input.assignee_agent_id !== undefined ? input.assignee_agent_id : existing.assignee_agent_id,
+    assigneeAgentId,
+    assigneeSalesRepId,
     input.status ?? existing.status,
     input.result !== undefined ? input.result : existing.result,
     id,

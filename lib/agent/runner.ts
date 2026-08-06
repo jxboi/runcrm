@@ -4,6 +4,7 @@ import { Agent, ChatThread, ENTITIES, TraceEntry } from "../types";
 import { client } from "./client";
 import { EmitFn } from "./events";
 import { executeTool, HandoffRequest, isWriteTool, toolsForAgent } from "./tools";
+import { getWorkflow } from "../workflows";
 
 const MAX_ITERATIONS = 12;
 
@@ -25,14 +26,16 @@ export interface RunOptions {
   signal?: AbortSignal;
   onEvent?: EmitFn;
   thread?: ChatThread;
+  /** The graph currently open beside chat, if the user is in Workflow Studio. */
+  workflowId?: number | null;
 }
 
-async function buildSystemPrompt(agent: Agent, thread: ChatThread): Promise<string> {
+async function buildSystemPrompt(agent: Agent, thread: ChatThread, workflowId?: number | null): Promise<string> {
   // Teammates' access rights are listed too, so an agent knows who to hand work to.
   const roster = (await listAgents())
     .map(
       (a) =>
-        `- ${a.emoji} ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""} — ${ENTITIES.map(
+        `- ${a.emoji} ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""}${a.kind === "workflow" ? " — workflow builder" : ""} — ${ENTITIES.map(
           (e) => `${e}:${a.capabilities[e]}`
         ).join(" ")}`
     )
@@ -44,6 +47,31 @@ async function buildSystemPrompt(agent: Agent, thread: ChatThread): Promise<stri
     : thread.id === 1
       ? "This is the workspace Home thread for cross-account work and general updates."
       : "This is a standalone conversation. Infer its focus from the messages; do not assume it belongs to a particular account.";
+
+  const selectedWorkflow = agent.kind === "workflow" && workflowId ? await getWorkflow(workflowId) : null;
+  const workflowContext = agent.kind === "workflow"
+    ? `
+
+Workflow authoring rules:
+- You build and revise workflows; do not merely describe what a workflow could look like. A requested change is complete only after the appropriate workflow tool succeeds.
+- New workflows start as drafts. Create a concise graph with one trigger, stable lowercase node ids, and explicit connections.
+- Before revising, call get_workflow. Send the entire updated definition to revise_workflow, preserve everything not requested, and pass its current_version as expected_version.
+- Condition nodes use operation branch.if and config {"field":"record.status","operator":"equals","value":"qualified"}. They need exactly one edge labelled "yes" and one labelled "no".
+- Delay nodes use operation wait.duration and config {"duration":"2 days"}. AI nodes use operation agent.run and config {"instructions":"..."}.
+- Record-created and record-updated triggers use config.entity with one of: contact, deal, activity, task, sales_rep.
+- Sales rep actions are first-class: sales_rep.create uses {"name":"...","email":"...","phone":"..."}; contact.assign_sales_rep uses {"contact_id":"{{record.id}}","sales_rep_id":7}; deal.close uses {"deal_id":"{{record.id}}","sales_rep_id":7,"outcome":"won"}.
+- task.create requires config.title and may use either assignee_sales_rep_id or assignee_agent_id, never both. IDs may be literal numbers or runtime references such as {{record.sales_rep_id}}.
+- record.update uses {"entity":"contact","record_id":"{{record.id}}","fields":{"sales_rep_id":7}} and supports sales_rep as an entity.
+- email.send is a live action. Configure it with {"to":"{{record.email}}","subject":"Welcome, {{record.name}}","body":"Plain-text message"}; to may also be a list, and reply_to is optional. The sender and provider credentials are workspace settings, never workflow config.
+- notification.send still requires an integration adapter. Keep it in the graph when requested and mention that its connection must be configured.
+- Never activate, pause, archive, or restore a workflow unless the user explicitly asks. Editing an active workflow automatically returns it to draft for review.
+- After every successful save, state the workflow id and version, summarize assumptions, and ask the user to inspect the visual preview and describe any correction in chat.
+${
+  selectedWorkflow
+    ? `The workflow currently open beside this chat is #${selectedWorkflow.id}, “${selectedWorkflow.name}”, v${selectedWorkflow.current_version} (${selectedWorkflow.status}). Use it as the target when the user says “this workflow” or requests a revision. Current definition:\n${JSON.stringify(selectedWorkflow.definition)}`
+    : "No workflow is currently selected. Create a new one when the user describes a new automation; otherwise list workflows to resolve references."
+}`
+    : "";
 
   return `You are ${agent.name}, an AI agent working inside RunCRM, a small CRM shared by a human user and several agents.
 
@@ -74,6 +102,7 @@ Rules:
 
 Your operator instructions:
 ${agent.instructions || "(none)"}
+${workflowContext}
 
 Today's date: ${new Date().toISOString().slice(0, 10)}`;
 }
@@ -108,7 +137,7 @@ export async function runAgentTurn(agent: Agent, opts: RunOptions = {}): Promise
   const tools = toolsForAgent(agent);
   const thread = opts.thread ?? (await getThread(1));
   if (!thread) throw new Error("The Home thread is unavailable");
-  const system = await buildSystemPrompt(agent, thread);
+  const system = await buildSystemPrompt(agent, thread, opts.workflowId);
   const messages = await buildHistory(agent, thread.id);
   const mutationIds: number[] = [];
   const proposalIds: number[] = [];

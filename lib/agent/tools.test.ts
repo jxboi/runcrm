@@ -11,17 +11,21 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../crm", () => ({
   createContact: mocks.createContact,
+  createSalesRep: vi.fn(),
   createDeal: vi.fn(),
   createTask: vi.fn(),
   getContact: vi.fn(),
+  getSalesRep: vi.fn(),
   listActivities: vi.fn(),
   listAgents: vi.fn(),
   listContacts: vi.fn(),
   listDeals: vi.fn(),
+  listSalesReps: vi.fn(),
   listTasks: vi.fn(),
   logActivity: vi.fn(),
   updateContact: vi.fn(),
   updateDeal: vi.fn(),
+  updateSalesRep: vi.fn(),
   updateTask: vi.fn(),
 }));
 
@@ -39,8 +43,9 @@ const autoAgent: Agent = {
   id: 7,
   name: "Sales",
   emoji: "💼",
+  kind: "general",
   instructions: "",
-  capabilities: { contacts: "write", deals: "none", activities: "none", tasks: "none" },
+  capabilities: { contacts: "write", deals: "none", activities: "none", tasks: "none", sales_reps: "none" },
   autonomy: "auto",
   model: "test-model",
   created_at: "2026-08-04 00:00:00",

@@ -31,6 +31,8 @@ export default function Chat({
   onFocusRecord,
   proposals,
   onDecideProposal,
+  workflowContext,
+  draftSuggestion,
 }: {
   thread: ChatThread;
   agents: Agent[];
@@ -45,12 +47,29 @@ export default function Chat({
   onFocusRecord: (ref: EntityRef) => void;
   proposals: Proposal[];
   onDecideProposal: (id: number, decision: "approve" | "reject") => Promise<void>;
+  workflowContext?: { name: string | null } | null;
+  draftSuggestion?: { id: number; text: string } | null;
 }) {
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState(0);
+  const [handledSuggestionId, setHandledSuggestionId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  if (draftSuggestion && draftSuggestion.id !== handledSuggestionId) {
+    setHandledSuggestionId(draftSuggestion.id);
+    setDraft(draftSuggestion.text);
+    setMentionQuery(null);
+  }
+
+  useEffect(() => {
+    if (!draftSuggestion || draftSuggestion.id !== handledSuggestionId) return;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(draftSuggestion.text.length, draftSuggestion.text.length);
+    });
+  }, [draftSuggestion, handledSuggestionId]);
 
   const liveText = runs.map((r) => r.text.length + r.steps.length).join(",");
   useEffect(() => {
@@ -134,7 +153,9 @@ export default function Chat({
     agents.length === 0
       ? "Create an agent first…"
       : selected
-        ? `Message ${selected.name}…  (@ to address someone else)`
+        ? workflowContext
+          ? `Describe ${workflowContext.name ? `a change to ${workflowContext.name}` : "the workflow you want"}…`
+          : `Message ${selected.name}…  (@ to address someone else)`
         : "Message the team…  (@ to pick someone, or let it route)";
 
   return (
@@ -142,11 +163,13 @@ export default function Chat({
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800/70 px-5">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-sm">{thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}</span>
-            <h1 className="text-sm font-semibold text-slate-200">{thread.title}</h1>
+            <span className="text-sm">{workflowContext ? "✦" : thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}</span>
+            <h1 className="truncate text-sm font-semibold text-slate-200">{workflowContext ? "Build with chat" : thread.title}</h1>
           </div>
           <p className="text-[11px] text-slate-500">
-            {thread.account_name
+            {workflowContext
+              ? workflowContext.name ? `Editing “${workflowContext.name}” · every change becomes a version.` : "Describe a workflow, then refine every step here."
+              : thread.account_name
               ? `Account thread · agents use ${thread.account_name} as the default context.`
               : thread.id === 1
                 ? "Workspace-wide conversation for cross-account work and daily updates."
@@ -173,10 +196,12 @@ export default function Chat({
           <div className="mx-auto mt-16 max-w-sm rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center">
             <div className="text-2xl">💬</div>
             <div className="mt-2 text-sm font-medium text-slate-300">
-              {thread.account_name ? `Start the ${thread.account_name} conversation` : "Start the conversation"}
+              {workflowContext ? "Build your first workflow" : thread.account_name ? `Start the ${thread.account_name} conversation` : "Start the conversation"}
             </div>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              {thread.account_name ? (
+              {workflowContext ? (
+                <>Try: &ldquo;When a new lead is created, qualify it and create a follow-up task.&rdquo;</>
+              ) : thread.account_name ? (
                 <>Try: &ldquo;Summarize this account and tell me the next best action.&rdquo;</>
               ) : (
                 <>
@@ -299,8 +324,9 @@ export default function Chat({
           </div>
         </div>
         <div className="mt-1.5 px-1 text-[10px] text-slate-600">
-          Enter to send · Shift+Enter for a new line · @name to address an agent · you can keep typing while
-          one works
+          {workflowContext
+            ? "Describe changes naturally · every saved revision appears in the preview"
+            : "Enter to send · Shift+Enter for a new line · @name to address an agent · you can keep typing while one works"}
         </div>
       </div>
     </>

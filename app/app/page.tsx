@@ -9,6 +9,7 @@ import Sidebar from "../components/Sidebar";
 import Chat from "../components/Chat";
 import DataPanel from "../components/DataPanel";
 import AgentModal from "../components/AgentModal";
+import WorkflowStudio from "../components/WorkflowStudio";
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
   const rows = new Map<number, ChatMessage>();
@@ -30,6 +31,9 @@ export default function Workspace() {
   const [focusRef, setFocusRef] = useState<EntityRef | null>(null);
   const [modal, setModal] = useState<"closed" | "new" | Agent>("closed");
   const [toast, setToast] = useState<string | null>(null);
+  const [workspaceMode, setWorkspaceMode] = useState<"crm" | "workflows">("crm");
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
+  const [draftSuggestion, setDraftSuggestion] = useState<{ id: number; text: string } | null>(null);
 
   // One AbortController per request; a request may run several agents in turn.
   const abortersRef = useRef(new Map<string, AbortController>());
@@ -94,6 +98,7 @@ export default function Workspace() {
   }, [loadMessages, loadProposals, loadThreads]);
 
   const selectThread = useCallback((threadId: number) => {
+    setWorkspaceMode("crm");
     if (threadId === activeThreadRef.current) return;
     activeThreadRef.current = threadId;
     setActiveThreadId(threadId);
@@ -204,7 +209,20 @@ export default function Workspace() {
                     s.index === event.index ? { ...s, ok: event.ok, ms: event.ms, result: event.result } : s
                   ),
                 }));
-                if (event.ok && event.isWrite) setDataVersion((v) => v + 1);
+                if (event.ok && event.isWrite) {
+                  setDataVersion((v) => v + 1);
+                  if (["create_workflow", "revise_workflow", "restore_workflow_version", "set_workflow_status"].includes(event.tool)) {
+                    try {
+                      const workflowId = Number((JSON.parse(event.result) as { id?: unknown }).id);
+                      if (Number.isInteger(workflowId) && workflowId > 0) {
+                        setSelectedWorkflowId(workflowId);
+                        setWorkspaceMode("workflows");
+                      }
+                    } catch {
+                      // The studio still refreshes from dataVersion if an old server returned a non-JSON trace.
+                    }
+                  }
+                }
                 break;
               case "message":
                 // Swap the live bubble for the persisted one in the same commit.
@@ -341,7 +359,12 @@ export default function Workspace() {
 
       const ok = await startRun(
         "/api/chat/stream",
-        { content, agentId: recipient, threadId },
+        {
+          content,
+          agentId: recipient,
+          threadId,
+          context: workspaceMode === "workflows" ? { workflowId: selectedWorkflowId } : undefined,
+        },
         `chat-${optimistic.id}`,
         threadId,
         optimistic.id
@@ -349,8 +372,20 @@ export default function Workspace() {
       if (!ok) setMessages((cur) => cur.filter((m) => m.id !== optimistic.id));
       return ok;
     },
-    [agents, recipient, showToast, startRun]
+    [agents, recipient, selectedWorkflowId, showToast, startRun, workspaceMode]
   );
+
+  const openWorkflowStudio = useCallback(() => {
+    setWorkspaceMode("workflows");
+    const architect = agents.find((agent) => agent.kind === "workflow");
+    if (architect) setRecipient(architect.id);
+  }, [agents]);
+
+  const draftWorkflowPrompt = useCallback((text: string) => {
+    const architect = agents.find((agent) => agent.kind === "workflow");
+    if (architect) setRecipient(architect.id);
+    setDraftSuggestion({ id: Date.now(), text });
+  }, [agents]);
 
   const runTask = useCallback(
     async (taskId: number, assigneeId: number | null) => {
@@ -433,8 +468,10 @@ export default function Workspace() {
           onSelect={setRecipient}
           onNewAgent={() => setModal("new")}
           onEditAgent={(a) => setModal(a)}
+          workspaceMode={workspaceMode}
+          onOpenWorkflowStudio={openWorkflowStudio}
         />
-        <main className="crm-canvas flex min-w-0 flex-1 flex-col border-x border-slate-800/70 bg-slate-950">
+        <main className={`crm-canvas flex min-w-0 flex-col border-l border-slate-800/70 bg-slate-950 ${workspaceMode === "workflows" ? "w-[400px] shrink-0 border-r 2xl:w-[440px]" : "flex-1 border-r"}`}>
           <Chat
             key={activeThread.id}
             thread={activeThread}
@@ -450,18 +487,33 @@ export default function Workspace() {
             onFocusRecord={setFocusRef}
             proposals={activeProposals}
             onDecideProposal={decideProposal}
+            workflowContext={workspaceMode === "workflows" ? { name: selectedWorkflowId ? `workflow #${selectedWorkflowId}` : null } : null}
+            draftSuggestion={draftSuggestion}
           />
         </main>
-        <DataPanel
-          agents={agents}
-          version={dataVersion}
-          busyAgentIds={busyAgentIds}
-          focusRef={focusRef}
-          onRunTask={runTask}
-          onRunRoutine={runRoutine}
-          onOpenAccountThread={openThread}
-          onError={showToast}
-        />
+        {workspaceMode === "workflows" ? (
+          <WorkflowStudio
+            version={dataVersion}
+            selectedWorkflowId={selectedWorkflowId}
+            architectName={agents.find((agent) => agent.kind === "workflow")?.name ?? "Workflow Architect"}
+            onSelectWorkflow={setSelectedWorkflowId}
+            onDraftPrompt={draftWorkflowPrompt}
+            onSendPrompt={sendMessage}
+            onClose={() => setWorkspaceMode("crm")}
+            onError={showToast}
+          />
+        ) : (
+          <DataPanel
+            agents={agents}
+            version={dataVersion}
+            busyAgentIds={busyAgentIds}
+            focusRef={focusRef}
+            onRunTask={runTask}
+            onRunRoutine={runRoutine}
+            onOpenAccountThread={openThread}
+            onError={showToast}
+          />
+        )}
       </div>
 
       {modal !== "closed" && (

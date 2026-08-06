@@ -11,7 +11,7 @@ npm run dev
 
 The landing page is at http://localhost:3000 and the workspace at http://localhost:3000/app. The database is created and seeded on first run with sample contacts, deals, tasks, and two agents.
 
-**Credentials:** the Anthropic SDK resolves `ANTHROPIC_API_KEY` (put it in `.env.local`), `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile automatically. Without credentials, agent replies show a clear error; the CRM itself still works.
+**Credentials:** the Anthropic SDK resolves `ANTHROPIC_API_KEY` (put it in `.env.local`), `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile automatically. Without credentials, agent replies show a clear error; the CRM itself still works. Live workflow email uses Resend and requires `RESEND_API_KEY` plus a verified sender such as `RESEND_FROM_EMAIL=RunCRM <hello@example.com>`.
 
 ## Conversations and history
 
@@ -33,6 +33,7 @@ The landing page is at http://localhost:3000 and the workspace at http://localho
 - **Approvals** (`lib/proposals.ts`): an agent set to *ask me first* files each write as a proposal instead of making it. Approving re-fetches the agent and re-checks its access rights before executing, so a queued proposal is a request, never a stored permission.
 - **Tasks** (`POST /api/tasks/:id/run`): assigning + running a task posts the assignment into the chat, streams the assignee's work, stores the report on the task (`todo → running → done/failed`), and logs whatever the agent did.
 - **Routines** (`/api/routines`): daily, selected-weekday, and monthly work runs in the workspace timezone. A five-minute Cloudflare Cron Trigger claims due work without duplicates, catches up only the latest missed occurrence, and sends it through the same visible agent chain. Manual runs and failed-run retries stream live; scheduled results appear through lightweight workspace polling.
+- **Workflow email** (`email.send`): active workflows can send plain-text email through Resend. Nodes use `to`, `subject`, and `body`, support runtime placeholders such as `{{record.email}}`, and use provider idempotency keys so retries cannot duplicate a send. Tests remain dry runs; live runs are recorded separately.
 - **CRM API**: plain REST under `/api/contacts`, `/api/deals`, `/api/activities`, `/api/tasks`, `/api/agents`, `/api/threads`, `/api/messages`, `/api/proposals`, `/api/mutations/undo` — usable without the chat. `GET /api/messages?threadId=<id>` returns one conversation; `POST /api/threads` with `{}` starts a normal conversation, while `{ "accountName": "Acme Corp" }` creates or reopens an account thread.
 
 Routine schedules are configured in the workspace's **Routines** tab. Local scheduled events can be exercised at `/cdn-cgi/handler/scheduled`; hosted deployments must retain the `*/5 * * * *` trigger declared in `vite.config.ts`.
