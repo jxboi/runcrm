@@ -57,6 +57,9 @@ export default function WorkflowStudio({
   const [testing, setTesting] = useState(false);
   const [running, setRunning] = useState(false);
   const [sendingAction, setSendingAction] = useState(false);
+  const [workflowListOpen, setWorkflowListOpen] = useState(false);
+  const workflowListToggleRef = useRef<HTMLButtonElement>(null);
+  const workflowListCloseRef = useRef<HTMLButtonElement>(null);
 
   const selected = workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null;
   const selectedVersionKey = selected ? `${selected.id}:${selected.current_version}` : null;
@@ -99,6 +102,23 @@ export default function WorkflowStudio({
     }).catch((error) => onError(error instanceof Error ? error.message : "Could not load workflow history"));
     return () => { cancelled = true; };
   }, [onError, selectedWorkflowId, version]);
+
+  useEffect(() => {
+    if (!workflowListOpen) return;
+
+    const focusFrame = window.requestAnimationFrame(() => workflowListCloseRef.current?.focus());
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setWorkflowListOpen(false);
+      window.requestAnimationFrame(() => workflowListToggleRef.current?.focus());
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [workflowListOpen]);
 
   const runTest = async () => {
     if (!selected || testing) return;
@@ -146,12 +166,47 @@ export default function WorkflowStudio({
   const errors = selected?.validation.filter((issue) => issue.level === "error") ?? [];
   const warnings = selected?.validation.filter((issue) => issue.level === "warning") ?? [];
 
+  const startWorkflow = () => {
+    setTab("preview");
+    setWorkflowListOpen(false);
+    onDraftPrompt(`@${architectName} Create a workflow that `);
+  };
+
+  const selectWorkflow = (workflowId: number) => {
+    onSelectWorkflow(workflowId);
+    setTab("preview");
+    setWorkflowListOpen(false);
+    window.requestAnimationFrame(() => workflowListToggleRef.current?.focus());
+  };
+
+  const workflowListToggle = (
+    <button
+      ref={workflowListToggleRef}
+      type="button"
+      aria-label={`${workflowListOpen ? "Hide" : "Show"} workflows (${workflows.length})`}
+      aria-controls="workflow-list-panel"
+      aria-expanded={workflowListOpen}
+      onClick={() => setWorkflowListOpen((open) => !open)}
+      title={`${workflowListOpen ? "Hide" : "Show"} workflows`}
+      className={`inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-[11px] font-medium shadow-sm transition-colors ${
+        workflowListOpen
+          ? "border-indigo-500/35 bg-indigo-500/10 text-indigo-300"
+          : "border-slate-700 bg-white text-slate-400 hover:border-indigo-500/35 hover:text-indigo-300"
+      }`}
+    >
+      <WorkflowListIcon />
+      <span className="hidden 2xl:inline">Workflows</span>
+      <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] tabular-nums text-slate-500">{workflows.length}</span>
+      <ChevronIcon className={`hidden h-3 w-3 transition-transform 2xl:block ${workflowListOpen ? "rotate-180" : ""}`} />
+    </button>
+  );
+
   return (
     <section className="workflow-studio flex min-w-0 flex-1 flex-col bg-slate-950">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-800/80 bg-slate-950/95 px-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400">Workflow studio</span>
+            <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-400">Workflow studio</span>
             {selected && <span className="text-[10px] text-slate-600">/</span>}
             {selected && <span className="truncate text-xs font-semibold text-slate-200">{selected.name}</span>}
           </div>
@@ -160,89 +215,59 @@ export default function WorkflowStudio({
           </div>
         </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 xl:gap-2">
+          {!selected && workflowListToggle}
           {selected && (
             <>
               <StatusBadge status={selected.status} />
               <button
+                type="button"
+                aria-label={testing ? "Testing workflow" : "Test workflow"}
                 onClick={() => void runTest()}
                 disabled={testing || errors.length > 0}
                 title={errors.length ? "Fix validation errors before testing" : "Run a dry test with sample data"}
-                className="rounded-lg border border-slate-700 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-300 shadow-sm transition hover:border-indigo-500/50 hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-white px-2.5 text-[11px] font-medium text-slate-300 shadow-sm transition hover:border-indigo-500/50 hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-40 xl:px-3"
               >
-                {testing ? "Testing…" : "▷ Test"}
+                <span aria-hidden="true" className={testing ? "animate-pulse" : ""}>▷</span>
+                <span className="hidden xl:inline">{testing ? "Testing…" : "Test"}</span>
               </button>
               <button
+                type="button"
+                aria-label={running ? "Running workflow" : "Run workflow now"}
                 onClick={() => void runLive()}
                 disabled={running || selected.status !== "active" || errors.length > 0}
                 title={selected.status !== "active" ? "Activate the workflow before running it live" : "Execute live actions now"}
-                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 text-[11px] font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 xl:px-3"
               >
-                {running ? "Running…" : "▶ Run now"}
+                <span aria-hidden="true" className={running ? "animate-pulse" : ""}>▶</span>
+                <span className="hidden xl:inline">{running ? "Running…" : "Run now"}</span>
               </button>
               <button
+                type="button"
+                aria-label={`${selected.status === "active" ? "Pause" : "Activate"} workflow`}
                 onClick={() => void askArchitect(`${selected.status === "active" ? "Pause" : "Activate"} workflow #${selected.id} “${selected.name}”.`)}
                 disabled={sendingAction || (selected.status !== "active" && errors.length > 0)}
-                className={`rounded-lg px-3 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 xl:px-3 ${
                   selected.status === "active"
                     ? "border border-slate-700 text-slate-400 hover:text-slate-200"
                     : "bg-indigo-600 text-white hover:bg-indigo-500"
                 }`}
               >
-                {selected.status === "active" ? "Pause" : "Activate"}
+                <span aria-hidden="true">{selected.status === "active" ? "Ⅱ" : "✓"}</span>
+                <span className="hidden xl:inline">{selected.status === "active" ? "Pause" : "Activate"}</span>
               </button>
             </>
           )}
-          <button onClick={onClose} aria-label="Close Workflow Studio" className="ml-1 rounded-lg px-2 py-1 text-base text-slate-500 transition hover:bg-slate-900 hover:text-slate-200">×</button>
+          <button type="button" onClick={onClose} aria-label="Close Workflow Studio" className="ml-1 rounded-lg px-2 py-1 text-base text-slate-500 transition hover:bg-slate-900 hover:text-slate-200">×</button>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <nav className="hidden w-52 shrink-0 flex-col border-r border-slate-800/80 bg-slate-900/35 xl:flex">
-          <div className="flex items-center justify-between px-3 pb-2 pt-4">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Workflows</span>
-            <button
-              onClick={() => {
-                setTab("preview");
-                onDraftPrompt(`@${architectName} Create a workflow that `);
-              }}
-              className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-300 hover:bg-indigo-500/20"
-            >
-              + New
-            </button>
-          </div>
-          <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
-            {loading && <div className="px-2 py-5 text-center text-[11px] text-slate-600">Loading…</div>}
-            {!loading && workflows.length === 0 && <div className="px-2 py-5 text-center text-[11px] leading-relaxed text-slate-600">Your AI-built workflows will appear here.</div>}
-            {workflows.map((workflow) => (
-              <button
-                key={workflow.id}
-                onClick={() => { onSelectWorkflow(workflow.id); setTab("preview"); }}
-                className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
-                  workflow.id === selectedWorkflowId
-                    ? "border-indigo-500/40 bg-indigo-500/10"
-                    : "border-transparent hover:border-slate-800 hover:bg-slate-900/70"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${workflow.status === "active" ? "bg-emerald-500" : "bg-amber-400"}`} />
-                  <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-300">{workflow.name}</span>
-                  <span className="text-[9px] text-slate-600">v{workflow.current_version}</span>
-                </div>
-                <div className="mt-1 line-clamp-2 pl-3.5 text-[9px] leading-relaxed text-slate-600">{workflow.description}</div>
-              </button>
-            ))}
-          </div>
-          <div className="border-t border-slate-800/70 p-3 text-[9px] leading-relaxed text-slate-600">
-            Every chat edit creates a version. Activating requires a valid graph.
-          </div>
-        </nav>
-
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <main className="flex min-w-0 flex-1 flex-col">
           {selected ? (
             <>
               <div className="flex h-11 shrink-0 items-center border-b border-slate-800/70 px-4">
-                <div role="tablist" aria-label="Workflow views" className="flex h-full gap-5">
+                <div role="tablist" aria-label="Workflow views" className="flex h-full gap-3 xl:gap-5">
                   {(["preview", "versions", "runs"] as StudioTab[]).map((item) => (
                     <button
                       key={item}
@@ -255,18 +280,31 @@ export default function WorkflowStudio({
                     </button>
                   ))}
                 </div>
-                <div className="ml-auto flex items-center gap-3 text-[10px]">
+                <div className="ml-auto flex items-center gap-2 text-[10px] xl:gap-3">
                   {errors.length === 0 ? (
-                    <span className="text-emerald-400">✓ Valid</span>
+                    <span role="status" aria-label="Workflow is valid" className="text-emerald-400">
+                      <span aria-hidden="true" className="xl:hidden">✓</span>
+                      <span className="hidden xl:inline">✓ Valid</span>
+                    </span>
                   ) : (
-                    <span className="text-rose-400">{errors.length} error{errors.length === 1 ? "" : "s"}</span>
+                    <span role="status" aria-label={`${errors.length} workflow error${errors.length === 1 ? "" : "s"}`} className="text-rose-400">
+                      <span aria-hidden="true" className="xl:hidden">{errors.length}!</span>
+                      <span className="hidden xl:inline">{errors.length} error{errors.length === 1 ? "" : "s"}</span>
+                    </span>
                   )}
-                  {warnings.length > 0 && <span className="text-amber-400">{warnings.length} setup note{warnings.length === 1 ? "" : "s"}</span>}
+                  {warnings.length > 0 && (
+                    <span role="status" aria-label={`${warnings.length} setup note${warnings.length === 1 ? "" : "s"}`} className="text-amber-400">
+                      <span aria-hidden="true" className="xl:hidden">{warnings.length}△</span>
+                      <span className="hidden xl:inline">{warnings.length} setup note{warnings.length === 1 ? "" : "s"}</span>
+                    </span>
+                  )}
+                  {workflowListToggle}
                 </div>
               </div>
 
               {tab === "preview" && (
                 <WorkflowPreview
+                  key={`${selected.id}:${selected.current_version}`}
                   workflow={selected}
                   onChangeNode={(node) => onDraftPrompt(`@${architectName} In workflow #${selected.id}, change the “${node.title}” step so that `)}
                 />
@@ -285,9 +323,146 @@ export default function WorkflowStudio({
             <EmptyWorkflowState architectName={architectName} onDraftPrompt={onDraftPrompt} />
           )}
         </main>
+
+        <aside
+          id="workflow-list-panel"
+          aria-label="Workflows"
+          aria-hidden={!workflowListOpen}
+          inert={!workflowListOpen}
+          className={`absolute inset-y-0 right-0 z-30 flex w-72 max-w-[calc(100%-1rem)] flex-col border-l border-slate-800/90 bg-slate-950/95 shadow-[-18px_0_40px_rgba(30,32,38,0.13)] backdrop-blur-xl transition duration-200 ease-out motion-reduce:transition-none ${
+            workflowListOpen ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0"
+          }`}
+        >
+          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-800/80 px-3">
+            <button
+              ref={workflowListCloseRef}
+              type="button"
+              aria-label="Close workflows panel"
+              onClick={() => {
+                setWorkflowListOpen(false);
+                window.requestAnimationFrame(() => workflowListToggleRef.current?.focus());
+              }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
+            >
+              <ChevronIcon className="h-4 w-4" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-slate-200">Workflows</div>
+              <div className="mt-0.5 text-[9px] text-slate-500">
+                {loading ? "Loading automations…" : `${workflows.length} automation${workflows.length === 1 ? "" : "s"}`}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={startWorkflow}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-semibold text-white shadow-sm transition-colors hover:bg-indigo-500"
+            >
+              <PlusIcon />
+              New
+            </button>
+          </div>
+
+          <nav aria-label="Workflow list" className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3">
+            {loading && (
+              <div role="status" className="space-y-2">
+                <span className="sr-only">Loading workflows</span>
+                {[0, 1, 2].map((item) => (
+                  <div key={item} aria-hidden="true" className="animate-pulse rounded-xl border border-slate-800 bg-white/60 p-3">
+                    <div className="h-3 w-2/3 rounded bg-slate-800" />
+                    <div className="mt-3 h-2 w-full rounded bg-slate-900" />
+                    <div className="mt-1.5 h-2 w-4/5 rounded bg-slate-900" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!loading && workflows.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-4 py-6 text-center">
+                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+                  <WorkflowListIcon />
+                </div>
+                <div className="mt-3 text-xs font-semibold text-slate-300">No workflows yet</div>
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Describe an automation in chat and it will appear here.</p>
+                <button type="button" onClick={startWorkflow} className="mt-4 text-[10px] font-semibold text-indigo-400 hover:text-indigo-300">
+                  Create your first workflow →
+                </button>
+              </div>
+            )}
+
+            {!loading && workflows.map((workflow) => {
+              const current = workflow.id === selectedWorkflowId;
+              return (
+                <button
+                  type="button"
+                  key={workflow.id}
+                  aria-current={current ? "page" : undefined}
+                  onClick={() => selectWorkflow(workflow.id)}
+                  className={`group relative w-full overflow-hidden rounded-xl border p-3 text-left shadow-sm transition-colors ${
+                    current
+                      ? "border-indigo-500/30 bg-indigo-500/[0.08]"
+                      : "border-slate-800 bg-white/65 hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]"
+                  }`}
+                >
+                  {current && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-indigo-500" />}
+                  <span className="flex items-start gap-2.5">
+                    <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${workflowStatusDot(workflow.status)}`} aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-200">{workflow.name}</span>
+                        <span className="shrink-0 rounded-md bg-slate-900 px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-slate-500">v{workflow.current_version}</span>
+                      </span>
+                      <span className="mt-1.5 line-clamp-2 block text-[11px] leading-[1.45] text-slate-500">{workflow.description || "No description yet."}</span>
+                      <span className="mt-2.5 flex items-center justify-between gap-2 text-[9px] text-slate-500">
+                        <span className="capitalize">{workflow.status}</span>
+                        <span>{workflow.definition.nodes.length} node{workflow.definition.nodes.length === 1 ? "" : "s"}</span>
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="shrink-0 border-t border-slate-800/80 px-4 py-3 text-[9px] leading-relaxed text-slate-500">
+            Edits create recoverable versions · Activation requires a valid graph
+          </div>
+        </aside>
       </div>
     </section>
   );
+}
+
+function WorkflowListIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
+      <path d="M6.25 5.25h9M6.25 10h9M6.25 14.75h9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+      <circle cx="3.5" cy="5.25" r=".8" fill="currentColor" />
+      <circle cx="3.5" cy="10" r=".8" fill="currentColor" />
+      <circle cx="3.5" cy="14.75" r=".8" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ className = "h-3 w-3" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
+      <path d="m7.5 4.75 5 5.25-5 5.25" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
+function PlusIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
+      <path d="M10 4v12M4 10h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function workflowStatusDot(status: Workflow["status"]) {
+  if (status === "active") return "bg-emerald-500 ring-4 ring-emerald-500/10";
+  if (status === "paused") return "bg-slate-500 ring-4 ring-slate-500/10";
+  return "bg-amber-400 ring-4 ring-amber-400/10";
 }
 
 function StatusBadge({ status }: { status: Workflow["status"] }) {
@@ -296,7 +471,12 @@ function StatusBadge({ status }: { status: Workflow["status"] }) {
     : status === "paused"
       ? "border-slate-600 bg-slate-500/10 text-slate-400"
       : "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  return <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${cls}`}>{status}</span>;
+  return (
+    <span role="status" aria-label={`Status: ${status}`} className={`inline-flex h-5 items-center rounded-full border px-1.5 text-[9px] font-semibold uppercase tracking-wide xl:px-2 ${cls}`}>
+      <span aria-hidden="true" className="xl:hidden">●</span>
+      <span className="hidden xl:inline">{status}</span>
+    </span>
+  );
 }
 
 function EmptyWorkflowState({ architectName, onDraftPrompt }: { architectName: string; onDraftPrompt: (prompt: string) => void }) {
@@ -359,11 +539,31 @@ function graphLayout(nodes: WorkflowNode[], edges: WorkflowEdge[]) {
 }
 
 function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onChangeNode: (node: WorkflowNode) => void }) {
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(workflow.definition.nodes[0]?.id ?? null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.9);
+  const [fitMode, setFitMode] = useState(true);
   const viewportRef = useRef<HTMLDivElement>(null);
   const layout = useMemo(() => graphLayout(workflow.definition.nodes, workflow.definition.edges), [workflow.definition]);
   const selectedNode = workflow.definition.nodes.find((node) => node.id === selectedNodeId) ?? null;
+
+  const fitGraph = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const horizontalZoom = (viewport.clientWidth - 64) / layout.width;
+    const verticalZoom = (viewport.clientHeight - 64) / layout.height;
+    const nextZoom = Math.min(1, Math.max(0.45, Math.min(horizontalZoom, verticalZoom)));
+    setZoom(Number(nextZoom.toFixed(2)));
+  }, [layout.height, layout.width]);
+
+  useEffect(() => {
+    if (!fitMode) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const observer = new ResizeObserver(fitGraph);
+    observer.observe(viewport);
+    fitGraph();
+    return () => observer.disconnect();
+  }, [fitGraph, fitMode]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -376,15 +576,47 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
       <div ref={viewportRef} className="relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle,rgba(156,160,170,0.28)_0.8px,transparent_0.9px)] bg-[size:18px_18px]">
-        <div className="sticky left-3 top-3 z-20 flex w-fit items-center gap-1 rounded-lg border border-slate-800 bg-slate-950/90 p-1 shadow-sm backdrop-blur">
-          <button onClick={() => setZoom((value) => Math.max(0.6, value - 0.1))} aria-label="Zoom out" className="h-6 w-6 rounded text-xs text-slate-500 hover:bg-slate-900 hover:text-slate-200">−</button>
-          <span className="w-9 text-center text-[9px] tabular-nums text-slate-600">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom((value) => Math.min(1.3, value + 0.1))} aria-label="Zoom in" className="h-6 w-6 rounded text-xs text-slate-500 hover:bg-slate-900 hover:text-slate-200">+</button>
-          <button onClick={() => setZoom(0.9)} className="rounded px-1.5 py-1 text-[9px] text-slate-500 hover:bg-slate-900 hover:text-slate-200">Fit</button>
+        <div className="sticky left-3 top-3 z-20 flex w-fit items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/90 p-1 shadow-sm backdrop-blur">
+          <button
+            type="button"
+            onClick={() => {
+              setFitMode(false);
+              setZoom((value) => Math.max(0.4, Number((value - 0.1).toFixed(2))));
+            }}
+            aria-label="Zoom out"
+            className="h-7 w-7 rounded-lg text-xs text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
+          >
+            −
+          </button>
+          <span className="w-10 text-center text-[9px] tabular-nums text-slate-500">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            onClick={() => {
+              setFitMode(false);
+              setZoom((value) => Math.min(1.3, Number((value + 0.1).toFixed(2))));
+            }}
+            aria-label="Zoom in"
+            className="h-7 w-7 rounded-lg text-xs text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
+          >
+            +
+          </button>
+          <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-slate-800" />
+          <button
+            type="button"
+            aria-pressed={fitMode}
+            onClick={() => {
+              setFitMode(true);
+              fitGraph();
+            }}
+            className={`rounded-lg px-2 py-1.5 text-[9px] font-medium transition-colors ${fitMode ? "bg-indigo-500/10 text-indigo-400" : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"}`}
+          >
+            Fit view
+          </button>
         </div>
 
-        <div style={{ width: layout.width, height: layout.height, transform: `scale(${zoom})`, transformOrigin: "top center" }} className="relative mx-auto">
-          <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden>
+        <div style={{ width: layout.width * zoom, height: layout.height * zoom }} className="relative mx-auto">
+          <div style={{ width: layout.width, height: layout.height, transform: `scale(${zoom})`, transformOrigin: "top left" }} className="relative">
+            <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden>
             <defs>
               <marker id="workflow-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0 L0,7 L6,3.5 z" fill="#a6abb4" /></marker>
             </defs>
@@ -408,36 +640,48 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
                 </g>
               );
             })}
-          </svg>
-          {workflow.definition.nodes.map((node) => {
-            const point = layout.points.get(node.id)!;
-            const meta = KIND_META[node.kind];
-            const selected = node.id === selectedNodeId;
-            return (
-              <button
-                key={node.id}
-                onClick={() => setSelectedNodeId(node.id)}
-                style={{ left: point.x - 105, top: point.y, width: 210, height: 88 }}
-                className={`absolute rounded-2xl border bg-slate-950 p-3 text-left shadow-[0_8px_24px_rgba(30,32,38,0.08)] transition hover:-translate-y-0.5 ${selected ? "border-indigo-500 ring-4 ring-indigo-500/10" : "border-slate-700 hover:border-slate-600"}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold ${meta.className}`}>{meta.icon}</span>
-                  <span className="min-w-0">
-                    <span className="block text-[9px] font-semibold uppercase tracking-wider text-slate-500">{meta.label}</span>
-                    <span className="mt-0.5 block truncate text-xs font-semibold text-slate-200">{node.title}</span>
-                  </span>
-                </div>
-                <span className="mt-2 block truncate text-[9px] text-slate-600">{node.description || node.operation}</span>
-              </button>
-            );
-          })}
+            </svg>
+            {workflow.definition.nodes.map((node) => {
+              const point = layout.points.get(node.id)!;
+              const meta = KIND_META[node.kind];
+              const selected = node.id === selectedNodeId;
+              return (
+                <button
+                  type="button"
+                  key={node.id}
+                  onClick={() => setSelectedNodeId(node.id)}
+                  style={{ left: point.x - 105, top: point.y, width: 210, height: 88 }}
+                  className={`absolute rounded-2xl border bg-slate-950 p-3 text-left shadow-[0_8px_24px_rgba(30,32,38,0.08)] transition hover:-translate-y-0.5 ${selected ? "border-indigo-500 ring-4 ring-indigo-500/10" : "border-slate-700 hover:border-slate-600"}`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold ${meta.className}`}>{meta.icon}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[9px] font-semibold uppercase tracking-wider text-slate-500">{meta.label}</span>
+                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-200">{node.title}</span>
+                    </span>
+                  </div>
+                  <span className="mt-2 block truncate text-[9px] text-slate-600">{node.description || node.operation}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {selectedNode && (
-        <aside className="hidden w-60 shrink-0 overflow-y-auto border-l border-slate-800/80 bg-slate-900/30 p-4 2xl:block">
-          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${KIND_META[selectedNode.kind].className}`}>
-            {KIND_META[selectedNode.kind].icon} {KIND_META[selectedNode.kind].label}
+        <aside className="absolute right-3 top-3 z-20 hidden max-h-[calc(100%-1.5rem)] w-64 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/95 p-4 shadow-[0_16px_42px_rgba(30,32,38,0.14)] backdrop-blur-xl 2xl:block">
+          <div className="flex items-start justify-between gap-2">
+            <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${KIND_META[selectedNode.kind].className}`}>
+              {KIND_META[selectedNode.kind].icon} {KIND_META[selectedNode.kind].label}
+            </div>
+            <button
+              type="button"
+              aria-label="Close step details"
+              onClick={() => setSelectedNodeId(null)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
+            >
+              ×
+            </button>
           </div>
           <h3 className="mt-3 text-sm font-semibold text-slate-200">{selectedNode.title}</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{selectedNode.description}</p>
@@ -458,7 +702,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
               </div>
             ) : <div className="mt-1 text-[10px] italic text-slate-600">No configuration</div>}
           </div>
-          <button onClick={() => onChangeNode(selectedNode)} className="mt-4 w-full rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-[10px] font-medium text-indigo-300 hover:bg-indigo-500/20">Change this step in chat</button>
+          <button type="button" onClick={() => onChangeNode(selectedNode)} className="mt-4 w-full rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-[10px] font-medium text-indigo-300 hover:bg-indigo-500/20">Change this step in chat</button>
         </aside>
       )}
     </div>
