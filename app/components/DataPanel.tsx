@@ -101,7 +101,7 @@ function useFocusedRecord(focusRef: EntityRef | null, setTab: (tab: Tab) => void
 
 /** Ring applied to the row a trace chip points at. */
 function focusClass(focusedId: string | null, entity: Entity, id: number): string {
-  return focusedId === `${entity}-${id}` ? " ring-2 ring-emerald-400/70" : "";
+  return focusedId === `${entity}-${id}` ? " ring-2 ring-indigo-400/70" : "";
 }
 
 const STATUS_PILL: Record<string, string> = {
@@ -118,6 +118,10 @@ const STAGE_PILL: Record<string, string> = {
   won: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
   lost: "bg-rose-500/15 text-rose-300 border-rose-500/30",
 };
+
+function salesRepLabel(salesRep: SalesRep): string {
+  return `${salesRep.name} · ID ${salesRep.id}`;
+}
 
 const TASK_PILL: Record<string, string> = {
   todo: "bg-slate-500/15 text-slate-300 border-slate-500/30",
@@ -337,7 +341,6 @@ export default function DataPanel({
           {tab === "contacts" && (
             <ContactsTab
               contacts={contacts}
-              salesReps={salesReps}
               focusedId={focusedId}
               onCreated={reload}
               onOpenAccountThread={onOpenAccountThread}
@@ -391,29 +394,28 @@ export default function DataPanel({
 
 function ContactsTab({
   contacts,
-  salesReps,
   focusedId,
   onCreated,
   onOpenAccountThread,
   onError,
 }: {
   contacts: Contact[];
-  salesReps: SalesRep[];
   focusedId: string | null;
   onCreated: () => void;
   onOpenAccountThread: (accountName: string) => Promise<void>;
   onError: (m: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", company: "", status: "lead", sales_rep_id: "" });
+  const [form, setForm] = useState({ name: "", email: "", company: "", status: "lead" });
+  const [openingContactId, setOpeningContactId] = useState<number | null>(null);
 
   const create = async () => {
     try {
       await api("/api/contacts", {
         method: "POST",
-        body: JSON.stringify({ ...form, sales_rep_id: form.sales_rep_id ? Number(form.sales_rep_id) : null }),
+        body: JSON.stringify(form),
       });
-      setForm({ name: "", email: "", company: "", status: "lead", sales_rep_id: "" });
+      setForm({ name: "", email: "", company: "", status: "lead" });
       setShowForm(false);
       onCreated();
     } catch (e) {
@@ -421,120 +423,155 @@ function ContactsTab({
     }
   };
 
+  const openAccountThread = async (contact: Contact) => {
+    if (openingContactId !== null) return;
+    setOpeningContactId(contact.id);
+    try {
+      await onOpenAccountThread(contact.company ?? contact.name);
+    } finally {
+      setOpeningContactId(null);
+    }
+  };
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <button
+        type="button"
         onClick={() => setShowForm((s) => !s)}
-        className="w-full rounded-lg border border-dashed border-slate-700 py-1.5 text-xs text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
+        aria-expanded={showForm}
+        aria-controls="add-contact-form"
+        className="flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-700 bg-slate-950/45 px-3 py-2 text-xs font-medium text-slate-400 transition hover:border-indigo-500/50 hover:bg-indigo-950/45 hover:text-indigo-300"
       >
-        {showForm ? "Cancel" : "+ Add contact"}
+        <span aria-hidden="true" className="text-base leading-none">
+          {showForm ? "×" : "+"}
+        </span>
+        {showForm ? "Cancel" : "Add contact"}
       </button>
       {showForm && (
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-          <input
-            placeholder="Name *"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
-          />
-          <div className="flex gap-2">
+        <form
+          id="add-contact-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void create();
+          }}
+          className="space-y-2.5 rounded-xl border border-slate-800 bg-slate-950/80 p-3 shadow-sm"
+        >
+          <label className="block space-y-1">
+            <span className="text-[10px] font-medium text-slate-400">Name</span>
             <input
-              placeholder="Email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+              required
+              autoComplete="name"
+              placeholder="Jane Doe"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
             />
-            <input
-              placeholder="Company"
-              value={form.company}
-              onChange={(e) => setForm({ ...form, company: e.target.value })}
-              className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
-            />
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="min-w-0 space-y-1">
+              <span className="text-[10px] font-medium text-slate-400">Email</span>
+              <input
+                type="email"
+                autoComplete="email"
+                placeholder="jane@company.com"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
+              />
+            </label>
+            <label className="min-w-0 space-y-1">
+              <span className="text-[10px] font-medium text-slate-400">Company</span>
+              <input
+                autoComplete="organization"
+                placeholder="Acme"
+                value={form.company}
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
+              />
+            </label>
           </div>
-          <div className="flex gap-2">
-            <select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
-            >
-              {CONTACT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
-              value={form.sales_rep_id}
-              onChange={(e) => setForm({ ...form, sales_rep_id: e.target.value })}
-              aria-label="Sales rep"
-              className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
-            >
-              <option value="">No sales rep</option>
-              {salesReps.map((salesRep) => (
-                <option key={salesRep.id} value={salesRep.id}>{salesRep.name}</option>
-              ))}
-            </select>
+          <div className="flex items-end gap-2">
+            <label className="min-w-0 flex-1 space-y-1">
+              <span className="text-[10px] font-medium text-slate-400">Status</span>
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs capitalize text-slate-200 transition focus:border-indigo-500 focus:outline-none"
+              >
+                {CONTACT_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
-              onClick={create}
+              type="submit"
               disabled={!form.name.trim()}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
+              className="min-h-9 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white transition enabled:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Add
+              Add contact
             </button>
           </div>
-        </div>
+        </form>
       )}
       {contacts.map((c) => (
-        <div
+        <article
           key={c.id}
           data-record={`contacts-${c.id}`}
-          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "contacts", c.id)}`}
+          aria-labelledby={`contact-${c.id}-name`}
+          className={`rounded-xl border border-slate-800 bg-slate-950/85 p-3 shadow-[0_1px_2px_rgba(17,18,22,0.04)] transition-shadow${focusClass(focusedId, "contacts", c.id)}`}
         >
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium text-slate-200">{c.name}</div>
-              <div className="truncate text-[11px] text-slate-500">
-                {c.company ?? "—"}
-                {c.email ? ` · ${c.email}` : ""}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <h3
+                  id={`contact-${c.id}-name`}
+                  title={c.name}
+                  className="min-w-0 truncate text-sm font-semibold leading-5 text-slate-200"
+                >
+                  {c.name}
+                </h3>
+                <Pill text={c.status} map={STATUS_PILL} />
+              </div>
+              <div
+                title={[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
+                className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-400"
+              >
+                {[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                onClick={() => void onOpenAccountThread(c.company ?? c.name)}
-                title={`Open ${c.company ?? c.name} conversation`}
-                aria-label={`Open ${c.company ?? c.name} conversation`}
-                className="rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-500 transition hover:border-indigo-500/50 hover:text-indigo-300"
-              >
-                💬
-              </button>
-              <Pill text={c.status} map={STATUS_PILL} />
-            </div>
           </div>
-          {c.notes && <div className="mt-1.5 truncate text-[11px] italic text-slate-600">{c.notes}</div>}
-          <label className="mt-2 flex items-center gap-2 text-[10px] text-slate-500">
-            <span className="shrink-0">Sales rep</span>
-            <select
-              value={c.sales_rep_id ?? ""}
-              onChange={async (event) => {
-                try {
-                  await api(`/api/contacts/${c.id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify({ sales_rep_id: event.target.value ? Number(event.target.value) : null }),
-                  });
-                  onCreated();
-                } catch (error) {
-                  onError(error instanceof Error ? error.message : "Failed to assign sales rep");
-                }
-              }}
-              className="min-w-0 flex-1 rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
+          {c.notes && (
+            <p
+              title={c.notes}
+              className="mt-2.5 line-clamp-2 rounded-lg bg-slate-900/70 px-2.5 py-2 text-[11px] leading-4 text-slate-400"
             >
-              <option value="">Unassigned</option>
-              {salesReps.map((salesRep) => (
-                <option key={salesRep.id} value={salesRep.id}>{salesRep.name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+              {c.notes}
+            </p>
+          )}
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-800/80 pt-2.5">
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium text-slate-400">Sales rep</div>
+              <div
+                title={c.sales_rep_name ?? "Unassigned"}
+                className="mt-0.5 truncate text-[11px] font-medium text-slate-300"
+              >
+                {c.sales_rep_name ?? "Unassigned"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void openAccountThread(c)}
+              disabled={openingContactId !== null}
+              title={`Open ${c.company ?? c.name} conversation`}
+              aria-label={`Open ${c.company ?? c.name} conversation`}
+              className="min-h-9 shrink-0 rounded-lg border border-indigo-800 bg-indigo-950/75 px-3 text-[11px] font-semibold text-indigo-300 transition hover:border-indigo-500/45 hover:bg-indigo-900/75 hover:text-indigo-200 disabled:cursor-wait disabled:opacity-60"
+            >
+              {openingContactId === c.id ? "Opening…" : "Message"}
+            </button>
+          </div>
+        </article>
       ))}
     </div>
   );
@@ -612,7 +649,12 @@ function SalesRepsTab({
           data-record={`sales_reps-${salesRep.id}`}
           className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "sales_reps", salesRep.id)}`}
         >
-          <div className="text-[13px] font-medium text-slate-200">{salesRep.name}</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 truncate text-[13px] font-medium text-slate-200">{salesRep.name}</div>
+            <span className="shrink-0 rounded border border-slate-700 bg-slate-950/70 px-1.5 py-0.5 font-mono text-[9px] text-slate-400">
+              ID {salesRep.id}
+            </span>
+          </div>
           <div className="mt-0.5 truncate text-[11px] text-slate-500">
             {[salesRep.email, salesRep.phone].filter(Boolean).join(" · ") || "No contact details"}
           </div>
@@ -789,7 +831,7 @@ function DealsTab({
               >
                 <option value="">Choose closer</option>
                 {salesReps.map((salesRep) => (
-                  <option key={salesRep.id} value={salesRep.id}>{salesRep.name}</option>
+                  <option key={salesRep.id} value={salesRep.id}>{salesRepLabel(salesRep)}</option>
                 ))}
               </select>
               <button
@@ -893,7 +935,7 @@ function TasksTab({
               <optgroup label="Sales reps">
                 {salesReps.map((salesRep) => (
                   <option key={salesRep.id} value={`rep:${salesRep.id}`}>
-                    👤 {salesRep.name}
+                    👤 {salesRepLabel(salesRep)}
                   </option>
                 ))}
               </optgroup>
