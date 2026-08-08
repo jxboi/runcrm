@@ -42,7 +42,7 @@ function SectionAction({
     <button
       type="button"
       aria-busy={disabled || undefined}
-      className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-transparent bg-transparent text-[11px] font-semibold text-slate-400 transition-colors hover:bg-slate-900 hover:text-indigo-300 disabled:cursor-wait disabled:opacity-50 ${collapsed ? "h-8 w-8 p-0" : "h-7 gap-1 px-1.5"}`}
+      className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap border border-transparent bg-transparent text-[11px] font-semibold text-slate-400 transition-colors disabled:cursor-wait disabled:opacity-50 ${collapsed ? "h-10 w-10 rounded-xl p-0 hover:bg-slate-100 hover:text-slate-900" : "h-7 gap-1 rounded-lg px-1.5 hover:bg-slate-900 hover:text-indigo-300"}`}
       disabled={disabled}
       onClick={onClick}
       title={title}
@@ -97,10 +97,10 @@ export default function Sidebar({
     <aside
       aria-label="Workspace sidebar"
       data-collapsed={collapsed || undefined}
-      className={`crm-sidebar flex shrink-0 flex-col overflow-x-hidden bg-slate-950 transition-[width] duration-200 motion-reduce:transition-none ${collapsed ? "w-[4.5rem]" : "w-[clamp(12.5rem,18vw,16rem)]"}`}
+      className={`crm-sidebar flex shrink-0 flex-col overflow-x-hidden bg-slate-950 transition-[width] duration-200 motion-reduce:transition-none ${collapsed ? "w-20" : "w-[clamp(12.5rem,18vw,16rem)]"}`}
     >
-      <div className={`flex shrink-0 items-center ${collapsed ? "flex-col gap-2 px-2 pb-3 pt-4" : "gap-3 px-4 pb-4 pt-5"}`}>
-        <div className={`crm-mark flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 font-bold text-white shadow-lg shadow-indigo-950 ${collapsed ? "h-9 w-9 text-sm" : "h-10 w-10 text-base"}`}>
+      <div className={`flex shrink-0 items-center ${collapsed ? "flex-col gap-5 px-3 pb-6 pt-5" : "gap-3 px-4 pb-4 pt-5"}`}>
+        <div className={`crm-mark flex shrink-0 items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-600 font-bold text-white shadow-lg shadow-indigo-950 ${collapsed ? "h-10 w-10 rounded-full text-sm" : "h-10 w-10 rounded-xl text-base"}`}>
           R
         </div>
         {!collapsed && (
@@ -109,7 +109,6 @@ export default function Sidebar({
               <span className="truncate text-[15px] font-semibold tracking-tight text-slate-100">RunCRM</span>
               <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">v0.1</span>
             </div>
-            <div className="mt-0.5 text-[11px] text-slate-400">Chat-first CRM</div>
           </div>
         )}
         <button
@@ -118,13 +117,13 @@ export default function Sidebar({
           aria-expanded={!collapsed}
           onClick={() => setCollapsed((value) => !value)}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`flex shrink-0 items-center justify-center rounded-lg border border-transparent text-slate-500 transition-colors hover:border-slate-700 hover:bg-slate-900 hover:text-slate-200 ${collapsed ? "h-8 w-8" : "ml-auto h-8 w-8"}`}
+          className={`flex shrink-0 items-center justify-center border text-slate-500 transition-colors hover:text-slate-900 ${collapsed ? "h-11 w-11 rounded-xl border-slate-200 bg-white shadow-[0_3px_10px_rgba(17,18,22,0.07)] hover:border-slate-300 hover:bg-slate-50" : "ml-auto h-8 w-8 rounded-lg border-transparent hover:border-slate-700 hover:bg-slate-900 hover:text-slate-200"}`}
         >
           {collapsed ? <PanelLeftOpen aria-hidden="true" className="h-4 w-4" /> : <PanelLeftClose aria-hidden="true" className="h-4 w-4" />}
         </button>
       </div>
 
-      <div className={`shrink-0 pb-3 ${collapsed ? "px-2" : "px-3"}`}>
+      <div className={`shrink-0 ${collapsed ? "px-3 pb-5" : "px-3 pb-3"}`}>
         <button
           type="button"
           aria-pressed={workspaceMode === "workflows"}
@@ -132,18 +131,18 @@ export default function Sidebar({
           title={collapsed ? "Workflow Studio" : undefined}
           className={`group relative flex w-full items-center overflow-hidden rounded-xl border text-left transition-colors ${collapsed ? "h-11 justify-center p-0" : "gap-3 px-3 py-2.5"} ${
             workspaceMode === "workflows"
-              ? "border-indigo-500/25 bg-indigo-500/[0.08] shadow-sm"
-              : "border-transparent bg-transparent hover:border-slate-800 hover:bg-white/55"
+              ? collapsed ? "border-transparent bg-slate-200/75 text-slate-900 shadow-sm" : "border-indigo-500/25 bg-indigo-500/[0.08] shadow-sm"
+              : collapsed ? "border-transparent bg-transparent hover:bg-slate-100" : "border-transparent bg-transparent hover:border-slate-800 hover:bg-white/55"
           }`}
         >
-          {workspaceMode === "workflows" && (
+          {workspaceMode === "workflows" && !collapsed && (
             <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-indigo-500" />
           )}
           <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+            className={`flex shrink-0 items-center justify-center rounded-lg border transition-colors ${collapsed ? "h-10 w-10 border-transparent bg-transparent text-slate-500 group-hover:text-slate-900" : "h-9 w-9"} ${
               workspaceMode === "workflows"
-                ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-400"
-                : "border-slate-800 bg-slate-900/80 text-slate-400 group-hover:border-indigo-500/20 group-hover:bg-indigo-500/10 group-hover:text-indigo-400"
+                ? collapsed ? "text-slate-900" : "border-indigo-500/20 bg-indigo-500/10 text-indigo-400"
+                : collapsed ? "" : "border-slate-800 bg-slate-900/80 text-slate-400 group-hover:border-indigo-500/20 group-hover:bg-indigo-500/10 group-hover:text-indigo-400"
             }`}
           >
             <Workflow aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
@@ -160,9 +159,9 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4 ${collapsed ? "px-2" : "px-3"}`}>
+      <div className="crm-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-5">
         <section aria-labelledby="sidebar-conversations-heading">
-          <div className={`flex items-center pb-2 pt-2 ${collapsed ? "justify-center" : "justify-between gap-3 px-1"}`}>
+          <div className={`flex items-center ${collapsed ? "justify-center pb-3" : "justify-between gap-3 px-1 pb-2 pt-2"}`}>
             <h2 id="sidebar-conversations-heading" className={collapsed ? "sr-only" : "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400"}>
               Conversations
             </h2>
@@ -190,17 +189,17 @@ export default function Sidebar({
                   aria-label={`Open ${thread.title} conversation`}
                   onClick={() => onSelectThread(thread.id)}
                   title={`${thread.title} — ${preview}`}
-                  className={`relative w-full overflow-hidden rounded-xl border text-left transition-colors ${collapsed ? "flex h-10 items-center justify-center p-0" : "px-3 py-2.5"} ${
+                  className={`relative w-full overflow-hidden rounded-xl border text-left transition-colors ${collapsed ? "flex h-11 items-center justify-center p-0" : "px-3 py-2.5"} ${
                     selected
-                      ? "border-indigo-500/20 bg-indigo-500/[0.08] shadow-sm"
-                      : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
+                      ? collapsed ? "border-transparent bg-slate-200/75 shadow-sm" : "border-indigo-500/20 bg-indigo-500/[0.08] shadow-sm"
+                      : collapsed ? "border-transparent hover:bg-slate-100" : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
                   }`}
                 >
-                  {selected && (
+                  {selected && !collapsed && (
                     <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-indigo-500" />
                   )}
                   <span className={`flex items-start ${collapsed ? "justify-center" : "gap-2.5"}`}>
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${collapsed ? "mt-0" : "mt-0.5"} ${selected ? "bg-indigo-500/10 text-indigo-400" : "bg-slate-800/75 text-slate-400"}`}>
+                    <span className={`flex shrink-0 items-center justify-center rounded-lg ${collapsed ? "mt-0 h-9 w-9 bg-transparent" : "mt-0.5 h-7 w-7"} ${selected ? collapsed ? "text-slate-900" : "bg-indigo-500/10 text-indigo-400" : collapsed ? "text-slate-500" : "bg-slate-800/75 text-slate-400"}`}>
                       <ThreadIcon kind={kind} />
                     </span>
                     {!collapsed && <span className="min-w-0 flex-1">
@@ -219,10 +218,10 @@ export default function Sidebar({
           </nav>
         </section>
 
-        <div aria-hidden="true" className={`${collapsed ? "mx-2 my-3" : "mx-1 my-4"} h-px bg-slate-800/85`} />
+        <div aria-hidden="true" className={`${collapsed ? "mx-2 my-5 bg-slate-200" : "mx-1 my-4 bg-slate-800/85"} h-px`} />
 
         <section aria-labelledby="sidebar-agents-heading">
-          <div className={`flex items-center pb-2 ${collapsed ? "justify-center" : "justify-between gap-3 px-1"}`}>
+          <div className={`flex items-center ${collapsed ? "justify-center pb-3" : "justify-between gap-3 px-1 pb-2"}`}>
             <h2 id="sidebar-agents-heading" className={collapsed ? "sr-only" : "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400"}>
               Agents
             </h2>
@@ -252,13 +251,13 @@ export default function Sidebar({
                     aria-pressed={selected}
                     onClick={() => onSelect(agent.id)}
                     title={collapsed ? agent.name : undefined}
-                    className={`relative flex w-full items-center overflow-hidden rounded-xl border text-left transition-colors ${collapsed ? "h-11 justify-center p-0" : "gap-2.5 py-2.5 pl-3 pr-10"} ${
+                    className={`relative flex w-full items-center overflow-hidden rounded-xl border text-left transition-colors ${collapsed ? "h-12 justify-center p-0" : "gap-2.5 py-2.5 pl-3 pr-10"} ${
                       selected
-                        ? collapsed ? "border-indigo-500/20 bg-indigo-500/[0.08]" : "border-transparent bg-transparent"
-                        : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
+                        ? collapsed ? "border-transparent bg-slate-200/75 shadow-sm" : "border-transparent bg-transparent"
+                        : collapsed ? "border-transparent hover:bg-slate-100" : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
                     }`}
                   >
-                    <span className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${selected ? "bg-indigo-950 text-indigo-300 ring-1 ring-indigo-500/20" : "bg-slate-800/80"}`}>
+                    <span className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${selected ? collapsed ? "bg-transparent text-slate-900" : "bg-indigo-950 text-indigo-300 ring-1 ring-indigo-500/20" : collapsed ? "bg-transparent text-slate-500" : "bg-slate-800/80"}`}>
                       <AgentIcon icon={agent.emoji} name={agent.name} className="h-4.5 w-4.5" />
                       {collapsed && busy && <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-indigo-400 ring-2 ring-slate-950" />}
                     </span>

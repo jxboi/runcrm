@@ -143,6 +143,27 @@ details > summary::-webkit-details-marker {
   background: linear-gradient(180deg, #f8f8fa 0%, #f2f3f6 100%);
 }
 
+.crm-sidebar[data-collapsed] {
+  border-right: 1px solid rgba(211, 214, 220, 0.85);
+  background: rgba(250, 250, 251, 0.98);
+  box-shadow: 8px 0 28px rgba(30, 32, 38, 0.055);
+}
+
+.crm-sidebar[data-collapsed] .crm-mark {
+  background: conic-gradient(from 210deg, #6b4fd3, #5ac8c8, #f2bf64, #ca6cb8, #6b4fd3);
+  box-shadow:
+    0 8px 18px rgba(78, 67, 145, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.82) inset;
+}
+
+.crm-sidebar[data-collapsed] .crm-sidebar-scroll {
+  scrollbar-width: none;
+}
+
+.crm-sidebar[data-collapsed] .crm-sidebar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .crm-mark {
   box-shadow:
     0 8px 22px rgba(107, 80, 203, 0.22),
