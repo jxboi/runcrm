@@ -5,7 +5,7 @@ import { fmtTime } from "@/lib/client";
 import { Agent, ChatThread, ENTITIES, Recipient } from "@/lib/types";
 
 const ACCESS_DOT: Record<string, string> = {
-  none: "bg-slate-700",
+  none: "bg-slate-500",
   read: "bg-sky-500",
   write: "bg-emerald-500",
 };
@@ -145,7 +145,7 @@ export default function Sidebar({
   };
 
   return (
-    <aside aria-label="Workspace sidebar" className="crm-sidebar flex w-[16rem] shrink-0 flex-col bg-slate-950">
+    <aside aria-label="Workspace sidebar" className="crm-sidebar flex w-[clamp(12.5rem,18vw,16rem)] shrink-0 flex-col bg-slate-950">
       <div className="flex shrink-0 items-center gap-3 px-4 pb-4 pt-5">
         <div className="crm-mark flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold text-white shadow-lg shadow-indigo-950">
           R
@@ -173,7 +173,13 @@ export default function Sidebar({
           {workspaceMode === "workflows" && (
             <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-indigo-500" />
           )}
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-indigo-400 transition-colors group-hover:bg-indigo-500/15">
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+              workspaceMode === "workflows"
+                ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-400"
+                : "border-slate-800 bg-slate-900/80 text-slate-400 group-hover:border-indigo-500/20 group-hover:bg-indigo-500/10 group-hover:text-indigo-400"
+            }`}
+          >
             <WorkflowIcon />
           </span>
           <span className="min-w-0 flex-1">
@@ -276,7 +282,7 @@ export default function Sidebar({
                     onClick={() => onSelect(agent.id)}
                     className={`relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl border py-2.5 pl-3 pr-10 text-left transition-colors ${
                       selected
-                        ? "border-transparent bg-slate-900/85"
+                        ? "border-transparent bg-transparent"
                         : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
                     }`}
                   >
@@ -285,7 +291,13 @@ export default function Sidebar({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
-                        <span className={`truncate text-[13px] font-medium ${selected ? "text-indigo-300" : "text-slate-200"}`}>{agent.name}</span>
+                        <span className="truncate text-[13px] font-medium text-slate-200">{agent.name}</span>
+                        {selected && (
+                          <span className="inline-flex shrink-0 items-center" title="Selected recipient">
+                            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                            <span className="sr-only">Selected recipient</span>
+                          </span>
+                        )}
                         {busy && (
                           <span className="inline-flex shrink-0 items-center" title="Working">
                             <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
@@ -299,7 +311,7 @@ export default function Sidebar({
                             Builder
                           </span>
                         )}
-                        <span aria-label={`Access: ${accessSummary}`} className="inline-flex shrink-0 items-center gap-1" role="img">
+                        <span aria-label={`Access: ${accessSummary}`} className="inline-flex shrink-0 items-center gap-1 opacity-70" role="img">
                           {ENTITIES.map((entity) => (
                             <span
                               aria-hidden="true"
@@ -336,7 +348,7 @@ export default function Sidebar({
           <span aria-hidden="true" className="ml-auto flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-700" />
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
           </span>
           <ChevronRightIcon className="h-3.5 w-3.5 text-slate-500 transition-transform group-open:rotate-90" />
         </summary>
@@ -349,10 +361,10 @@ export default function Sidebar({
               <span className="h-1.5 w-1.5 rounded-full bg-sky-500" /> Read
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-slate-700" /> None
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-500" /> None
             </span>
           </div>
-          <p className="mt-2 text-[10px] leading-4 text-slate-500">Dot order: contacts, deals, activity, tasks, sales reps.</p>
+          <p className="mt-2 text-[11px] leading-4 text-slate-400">Dot order: contacts, deals, activity, tasks, sales reps.</p>
         </div>
       </details>
     </aside>

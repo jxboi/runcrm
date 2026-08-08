@@ -85,9 +85,10 @@ function useFocusedRecord(focusRef: EntityRef | null, setTab: (tab: Tab) => void
     if (!focusRef) return;
     const key = `${focusRef.entity}-${focusRef.id}`;
     const scroll = requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       containerRef.current
         ?.querySelector(`[data-record="${key}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
     });
     const fade = setTimeout(() => setFaded(true), 2600);
     return () => {
@@ -139,6 +140,8 @@ function Pill({ text, map }: { text: string; map: Record<string, string> }) {
     </span>
   );
 }
+
+const RECORD_ROW_CLASS = "group -mx-1 rounded-xl px-3 transition-colors hover:bg-slate-950/65";
 
 export default function DataPanel({
   agents,
@@ -239,7 +242,7 @@ export default function DataPanel({
         : null;
 
   return (
-    <aside className="crm-data-panel hidden w-[360px] shrink-0 flex-col overflow-x-hidden bg-slate-950 2xl:w-[368px] lg:flex">
+    <aside aria-label="CRM data" className="crm-data-panel hidden w-[clamp(20rem,25vw,23rem)] shrink-0 flex-col overflow-x-hidden bg-slate-950 lg:flex">
       <div
         role="tablist"
         aria-label="CRM data sections"
@@ -309,7 +312,7 @@ export default function DataPanel({
                   }
                   className={`flex min-w-0 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-medium transition ${
                     selected
-                      ? "bg-slate-950 text-slate-100 shadow-sm ring-1 ring-slate-800/80"
+                      ? "bg-indigo-950/80 text-indigo-200 shadow-sm ring-1 ring-indigo-800/80"
                       : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
@@ -435,10 +438,7 @@ function ContactsTab({
 
   return (
     <div>
-      <div className="mb-2 flex min-h-8 items-center justify-between gap-3 px-1">
-        <p className="text-xs text-slate-400">
-          {contacts.length} {contacts.length === 1 ? "person" : "people"}
-        </p>
+      <div className="mb-2 flex min-h-8 items-center justify-end px-1">
         <button
           type="button"
           onClick={() => setShowForm((s) => !s)}
@@ -469,7 +469,7 @@ function ContactsTab({
               placeholder="Jane Doe"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
             />
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -481,7 +481,7 @@ function ContactsTab({
                 placeholder="jane@company.com"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
               />
             </label>
             <label className="min-w-0 space-y-1">
@@ -491,7 +491,7 @@ function ContactsTab({
                 placeholder="Acme"
                 value={form.company}
                 onChange={(e) => setForm({ ...form, company: e.target.value })}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
               />
             </label>
           </div>
@@ -501,7 +501,7 @@ function ContactsTab({
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs capitalize text-slate-200 transition focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs capitalize text-slate-200 transition focus:border-indigo-500 focus:outline-none"
               >
                 {CONTACT_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -526,7 +526,7 @@ function ContactsTab({
             key={c.id}
             data-record={`contacts-${c.id}`}
             aria-labelledby={`contact-${c.id}-name`}
-            className={`group -mx-1 rounded-xl px-3 py-3.5 transition-colors hover:bg-slate-950/65${focusClass(focusedId, "contacts", c.id)}`}
+            className={`${RECORD_ROW_CLASS} py-3.5${focusClass(focusedId, "contacts", c.id)}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -572,7 +572,7 @@ function ContactsTab({
                 disabled={openingContactId !== null}
                 title={`Open ${c.company ?? c.name} conversation`}
                 aria-label={`Open ${c.company ?? c.name} conversation`}
-                className="min-h-8 shrink-0 rounded-lg border border-transparent bg-transparent px-2.5 text-xs font-semibold text-indigo-300 transition hover:border-indigo-800 hover:bg-indigo-950/80 hover:text-indigo-200 disabled:cursor-wait disabled:opacity-60"
+                className="min-h-8 shrink-0 rounded-lg border border-transparent bg-transparent px-2.5 text-xs font-semibold text-slate-400 transition group-hover:text-indigo-300 hover:border-indigo-800 hover:bg-indigo-950/80 hover:text-indigo-200 focus-visible:text-indigo-300 disabled:cursor-wait disabled:opacity-60"
               >
                 {openingContactId === c.id ? "Opening…" : "Message"}
               </button>
@@ -622,55 +622,60 @@ function SalesRepsTab({
       {showForm && (
         <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
           <input
+            aria-label="Sales rep name"
             placeholder="Name *"
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
           />
           <div className="flex gap-2">
             <input
+              aria-label="Sales rep email"
               placeholder="Email"
               value={form.email}
               onChange={(event) => setForm({ ...form, email: event.target.value })}
-              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+              className="min-w-0 flex-1 rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
             />
             <input
+              aria-label="Sales rep phone"
               placeholder="Phone"
               value={form.phone}
               onChange={(event) => setForm({ ...form, phone: event.target.value })}
-              className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+              className="min-w-0 flex-1 rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
             />
           </div>
           <button
             onClick={create}
             disabled={!form.name.trim()}
-            className="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
+            className="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-700 disabled:opacity-40"
           >
             Add sales rep
           </button>
         </div>
       )}
-      {salesReps.map((salesRep) => (
-        <div
-          key={salesRep.id}
-          data-record={`sales_reps-${salesRep.id}`}
-          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "sales_reps", salesRep.id)}`}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 truncate text-[13px] font-medium text-slate-200">{salesRep.name}</div>
-            <span className="shrink-0 rounded border border-slate-700 bg-slate-950/70 px-1.5 py-0.5 font-mono text-[9px] text-slate-400">
-              ID {salesRep.id}
-            </span>
+      <div className="divide-y divide-slate-800/85">
+        {salesReps.map((salesRep) => (
+          <div
+            key={salesRep.id}
+            data-record={`sales_reps-${salesRep.id}`}
+            className={`${RECORD_ROW_CLASS} py-3${focusClass(focusedId, "sales_reps", salesRep.id)}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 truncate text-[13px] font-medium text-slate-200">{salesRep.name}</div>
+              <span className="shrink-0 rounded border border-slate-700 bg-slate-950/70 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+                ID {salesRep.id}
+              </span>
+            </div>
+            <div className="mt-0.5 truncate text-[11px] text-slate-400">
+              {[salesRep.email, salesRep.phone].filter(Boolean).join(" · ") || "No contact details"}
+            </div>
+            <div className="mt-2 flex gap-3 text-[11px] text-slate-400">
+              <span>{Number(salesRep.contact_count ?? 0)} contacts</span>
+              <span>{Number(salesRep.won_deal_count ?? 0)} won · {fmtMoney(Number(salesRep.won_value ?? 0))}</span>
+            </div>
           </div>
-          <div className="mt-0.5 truncate text-[11px] text-slate-500">
-            {[salesRep.email, salesRep.phone].filter(Boolean).join(" · ") || "No contact details"}
-          </div>
-          <div className="mt-2 flex gap-3 text-[10px] text-slate-500">
-            <span>{Number(salesRep.contact_count ?? 0)} contacts</span>
-            <span>{Number(salesRep.won_deal_count ?? 0)} won · {fmtMoney(Number(salesRep.won_value ?? 0))}</span>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -742,11 +747,11 @@ function DealsTab({
     <div className="space-y-2">
       <div className="flex gap-2">
         <div className="flex-1 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
-          <div className="text-[10px] uppercase tracking-wide text-slate-500">Open pipeline</div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-400">Open pipeline</div>
           <div className="text-sm font-semibold text-slate-100">{fmtMoney(openValue)}</div>
         </div>
         <div className="flex-1 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
-          <div className="text-[10px] uppercase tracking-wide text-slate-500">Won</div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-400">Won</div>
           <div className="text-sm font-semibold text-emerald-300">{fmtMoney(wonValue)}</div>
         </div>
       </div>
@@ -760,23 +765,26 @@ function DealsTab({
       {showForm && (
         <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
           <input
+            aria-label="Deal title"
             placeholder="Title *"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
           />
           <div className="flex gap-2">
             <input
+              aria-label="Deal value"
               placeholder="Value ($)"
               type="number"
               value={form.value}
               onChange={(e) => setForm({ ...form, value: e.target.value })}
-              className="w-24 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+              className="w-24 rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
             />
             <select
+              aria-label="Deal contact"
               value={form.contact_id}
               onChange={(e) => setForm({ ...form, contact_id: e.target.value })}
-              className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+              className="flex-1 rounded-md border border-slate-500 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
             >
               <option value="">No contact</option>
               {contacts.map((c) => (
@@ -786,9 +794,10 @@ function DealsTab({
               ))}
             </select>
             <select
+              aria-label="Deal stage"
               value={form.stage}
               onChange={(e) => setForm({ ...form, stage: e.target.value })}
-              className="w-24 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+              className="w-24 rounded-md border border-slate-500 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
             >
               {DEAL_STAGES.map((s) => (
                 <option key={s} value={s}>
@@ -800,59 +809,61 @@ function DealsTab({
           <button
             onClick={create}
             disabled={!form.title.trim()}
-            className="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
+            className="w-full rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-700 disabled:opacity-40"
           >
             Add deal
           </button>
         </div>
       )}
 
-      {deals.map((d) => (
-        <div
-          key={d.id}
-          data-record={`deals-${d.id}`}
-          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "deals", d.id)}`}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium text-slate-200">{d.title}</div>
-              <div className="truncate text-[11px] text-slate-500">{d.contact_name ?? "No contact"}</div>
+      <div className="divide-y divide-slate-800/85">
+        {deals.map((d) => (
+          <div
+            key={d.id}
+            data-record={`deals-${d.id}`}
+            className={`${RECORD_ROW_CLASS} py-3${focusClass(focusedId, "deals", d.id)}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-medium text-slate-200">{d.title}</div>
+                <div className="truncate text-[11px] text-slate-400">{d.contact_name ?? "No contact"}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs font-semibold text-slate-300">{fmtMoney(d.value)}</span>
+                <Pill text={d.stage} map={STAGE_PILL} />
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="text-xs font-semibold text-slate-300">{fmtMoney(d.value)}</span>
-              <Pill text={d.stage} map={STAGE_PILL} />
-            </div>
+            {d.notes && <div className="mt-1.5 truncate text-[11px] italic text-slate-400">{d.notes}</div>}
+            {d.stage === "won" || d.stage === "lost" ? (
+              <div className="mt-2 text-[11px] text-slate-400">
+                Closed{d.closed_by_sales_rep_name ? ` by ${d.closed_by_sales_rep_name}` : ""}
+              </div>
+            ) : (
+              <div className="mt-2 flex gap-2">
+                <select
+                  value={closers[d.id] ?? contacts.find((contact) => contact.id === d.contact_id)?.sales_rep_id ?? ""}
+                  onChange={(event) => setClosers((current) => ({ ...current, [d.id]: event.target.value }))}
+                  aria-label={`Sales rep closing ${d.title}`}
+                  className="min-w-0 flex-1 rounded-md border border-slate-500 bg-slate-950 px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
+                >
+                  <option value="">Choose closer</option>
+                  {salesReps.map((salesRep) => (
+                    <option key={salesRep.id} value={salesRep.id}>{salesRepLabel(salesRep)}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void closeDeal(d)}
+                  disabled={salesReps.length === 0}
+                  className="min-h-6 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 transition enabled:hover:bg-emerald-500/20 disabled:opacity-40"
+                >
+                  Close won
+                </button>
+              </div>
+            )}
           </div>
-          {d.notes && <div className="mt-1.5 truncate text-[11px] italic text-slate-600">{d.notes}</div>}
-          {d.stage === "won" || d.stage === "lost" ? (
-            <div className="mt-2 text-[10px] text-slate-500">
-              Closed{d.closed_by_sales_rep_name ? ` by ${d.closed_by_sales_rep_name}` : ""}
-            </div>
-          ) : (
-            <div className="mt-2 flex gap-2">
-              <select
-                value={closers[d.id] ?? contacts.find((contact) => contact.id === d.contact_id)?.sales_rep_id ?? ""}
-                onChange={(event) => setClosers((current) => ({ ...current, [d.id]: event.target.value }))}
-                aria-label={`Sales rep closing ${d.title}`}
-                className="min-w-0 flex-1 rounded-md border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
-              >
-                <option value="">Choose closer</option>
-                {salesReps.map((salesRep) => (
-                  <option key={salesRep.id} value={salesRep.id}>{salesRepLabel(salesRep)}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => void closeDeal(d)}
-                disabled={salesReps.length === 0}
-                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 transition enabled:hover:bg-emerald-500/20 disabled:opacity-40"
-              >
-                Close won
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -913,23 +924,26 @@ function TasksTab({
       {showForm && (
         <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
           <input
+            aria-label="Task title"
             placeholder="Task title *"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
           />
           <textarea
+            aria-label="Task details"
             placeholder="Details for the agent (optional)"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             rows={2}
-            className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            className="w-full resize-none rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
           />
           <div className="flex gap-2">
             <select
+              aria-label="Task assignee"
               value={form.assignee}
               onChange={(e) => setForm({ ...form, assignee: e.target.value })}
-              className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+              className="flex-1 rounded-md border border-slate-500 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
             >
               <option value="">Unassigned</option>
               <optgroup label="AI agents">
@@ -950,7 +964,7 @@ function TasksTab({
             <button
               onClick={create}
               disabled={!form.title.trim()}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-700 disabled:opacity-40"
             >
               Create
             </button>
@@ -958,52 +972,57 @@ function TasksTab({
         </div>
       )}
 
-      {tasks.map((t) => {
-        const isRunning = t.status === "running" || runningTaskId === t.id;
-        // Only the assignee being busy blocks a run — other agents stay free.
-        const assigneeBusy = t.assignee_agent_id != null && busyAgentIds.includes(t.assignee_agent_id);
-        return (
-          <div
-            key={t.id}
-            data-record={`tasks-${t.id}`}
-            className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "tasks", t.id)}`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-[13px] font-medium text-slate-200">{t.title}</div>
-                {t.description && <div className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{t.description}</div>}
-                <div className="mt-1.5 flex items-center gap-2">
-                  <Pill text={isRunning ? "running" : t.status} map={TASK_PILL} />
-                  <span className="text-[11px] text-slate-500">
-                    {t.assignee_name
-                      ? `${t.assignee_emoji ?? ""} ${t.assignee_name}`
-                      : t.assignee_sales_rep_name
-                        ? `👤 ${t.assignee_sales_rep_name}`
-                        : "Unassigned"}
-                  </span>
+      <div className="divide-y divide-slate-800/85">
+        {tasks.map((t) => {
+          const isRunning = t.status === "running" || runningTaskId === t.id;
+          // Only the assignee being busy blocks a run — other agents stay free.
+          const assigneeBusy = t.assignee_agent_id != null && busyAgentIds.includes(t.assignee_agent_id);
+          return (
+            <div
+              key={t.id}
+              data-record={`tasks-${t.id}`}
+              className={`${RECORD_ROW_CLASS} py-3${focusClass(focusedId, "tasks", t.id)}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium text-slate-200">{t.title}</div>
+                  {t.description && <div className="mt-0.5 text-[11px] leading-relaxed text-slate-400">{t.description}</div>}
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <Pill text={isRunning ? "running" : t.status} map={TASK_PILL} />
+                    <span className="text-[11px] text-slate-400">
+                      {t.assignee_name
+                        ? `${t.assignee_emoji ?? ""} ${t.assignee_name}`
+                        : t.assignee_sales_rep_name
+                          ? `👤 ${t.assignee_sales_rep_name}`
+                          : "Unassigned"}
+                    </span>
+                  </div>
                 </div>
+                {t.assignee_agent_id != null && (
+                  <button
+                    onClick={() => onRun(t)}
+                    disabled={assigneeBusy || isRunning}
+                    className="min-h-6 shrink-0 rounded-md border border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300 transition enabled:hover:bg-indigo-500/25 disabled:opacity-40"
+                  >
+                    {isRunning ? "Running…" : t.status === "todo" ? "▶ Run" : "↻ Re-run"}
+                  </button>
+                )}
               </div>
-              {t.assignee_agent_id != null && (
-                <button
-                  onClick={() => onRun(t)}
-                  disabled={assigneeBusy || isRunning}
-                  className="shrink-0 rounded-md border border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300 transition enabled:hover:bg-indigo-500/25 disabled:opacity-40"
-                >
-                  {isRunning ? "Running…" : t.status === "todo" ? "▶ Run" : "↻ Re-run"}
-                </button>
+              {t.result && (
+                <details className="group mt-2">
+                  <summary className="inline-flex min-h-6 items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200">
+                    <span aria-hidden="true" className="transition-transform group-open:rotate-90">▸</span>
+                    Show result
+                  </summary>
+                  <div className="mt-1 whitespace-pre-wrap rounded-md border border-slate-800 bg-slate-950 p-2 text-[11px] leading-relaxed text-slate-400">
+                    {t.result}
+                  </div>
+                </details>
               )}
             </div>
-            {t.result && (
-              <details className="mt-2">
-                <summary className="text-[10px] text-slate-500 hover:text-slate-300">Show result</summary>
-                <div className="mt-1 whitespace-pre-wrap rounded-md border border-slate-800 bg-slate-950 p-2 text-[11px] leading-relaxed text-slate-400">
-                  {t.result}
-                </div>
-              </details>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1012,21 +1031,21 @@ function TasksTab({
 
 function ActivityTab({ activities, focusedId }: { activities: Activity[]; focusedId: string | null }) {
   if (activities.length === 0) {
-    return <div className="mt-8 text-center text-xs text-slate-600">No activity yet.</div>;
+    return <div className="mt-8 text-center text-xs text-slate-400">No activity yet.</div>;
   }
   return (
-    <div className="space-y-2">
+    <div className="divide-y divide-slate-800/85">
       {activities.map((a) => (
         <div
           key={a.id}
           data-record={`activities-${a.id}`}
-          className={`rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5 transition${focusClass(focusedId, "activities", a.id)}`}
+          className={`${RECORD_ROW_CLASS} py-3${focusClass(focusedId, "activities", a.id)}`}
         >
           <div className="flex items-start gap-2">
             <span className="text-sm">{ACTIVITY_ICON[a.type] ?? "📝"}</span>
             <div className="min-w-0 flex-1">
               <div className="text-[12px] leading-relaxed text-slate-300">{a.content}</div>
-              <div className="mt-1 text-[10px] text-slate-600">
+              <div className="mt-1 text-[11px] text-slate-400">
                 {a.actor} · {[a.contact_name, a.deal_title].filter(Boolean).join(" · ") || "unlinked"} ·{" "}
                 {fmtTime(a.created_at)}
               </div>

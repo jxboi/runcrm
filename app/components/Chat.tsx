@@ -160,40 +160,42 @@ export default function Chat({
 
   return (
     <>
-      <header className="crm-chat-header flex h-16 shrink-0 items-center justify-between border-b border-slate-800/70 px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm text-slate-400 ring-1 ring-slate-800/80">
-            {workflowContext ? "✦" : thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}
-          </span>
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold leading-5 tracking-tight text-slate-100">
-              {workflowContext ? "Build with chat" : thread.title}
-            </h1>
-            <p className="mt-0.5 truncate text-xs leading-4 text-slate-400">
-              {workflowContext
-                ? workflowContext.name
-                  ? `Editing “${workflowContext.name}” · every change becomes a version.`
-                  : "Describe a workflow, then refine every step here."
-                : thread.account_name
-                  ? `Account thread · agents use ${thread.account_name} as the default context.`
-                  : thread.id === 1
-                    ? "Workspace-wide conversation for cross-account work and daily updates."
-                    : "A focused conversation; its title is created from your first message."}
-            </p>
+      <header className="crm-chat-header flex h-16 shrink-0 items-center border-b border-slate-800/70 px-6">
+        <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm text-slate-400 ring-1 ring-slate-800/80">
+              {workflowContext ? "✦" : thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold leading-5 tracking-tight text-slate-100">
+                {workflowContext ? "Build with chat" : thread.title}
+              </h1>
+              <p className="crm-chat-subtitle mt-0.5 truncate text-xs leading-4 text-slate-400">
+                {workflowContext
+                  ? workflowContext.name
+                    ? `Editing “${workflowContext.name}” · every change becomes a version.`
+                    : "Describe a workflow, then refine every step here."
+                  : thread.account_name
+                    ? `Account thread · agents use ${thread.account_name} as the default context.`
+                    : thread.id === 1
+                      ? "Workspace-wide conversation for cross-account work and daily updates."
+                      : "A focused conversation; its title is created from your first message."}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {proposals.length > 0 && (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300">
-              {proposals.length} awaiting approval
-            </span>
-          )}
-          {runs.length > 0 && (
-            <span className="flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-1 text-[11px] text-indigo-300">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
-              {runs.length} running
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {proposals.length > 0 && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-300">
+                {proposals.length} awaiting approval
+              </span>
+            )}
+            {runs.length > 0 && (
+              <span className="flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-1 text-[11px] text-indigo-300">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
+                {runs.length} running
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -247,17 +249,19 @@ export default function Chat({
       <div className="crm-composer shrink-0 border-t border-slate-800/70 px-5 pb-4 pt-3">
         <div className="mx-auto w-full max-w-[960px]">
           {agents.length > 0 && (
-            <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+            <div className="crm-route-strip -mx-1 mb-2 flex items-center gap-1 overflow-x-auto px-1 pb-1">
+              <span className="mr-1 shrink-0 text-xs font-medium text-slate-400">
                 Route to
               </span>
               <button
+                type="button"
+                aria-pressed={recipient === "auto"}
                 onClick={() => onSelectRecipient("auto")}
                 title="Let RunCRM pick the right agent for each message"
-                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                   recipient === "auto"
                     ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200"
-                    : "border-transparent bg-slate-900/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    : "border-transparent bg-transparent text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"
                 }`}
               >
                 ✨ Auto
@@ -266,17 +270,24 @@ export default function Chat({
                 const busy = runs.some((r) => r.agentId === a.id);
                 return (
                   <button
+                    type="button"
                     key={a.id}
+                    aria-pressed={a.id === recipient}
                     onClick={() => onSelectRecipient(a.id)}
-                    className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                    className={`flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                       a.id === recipient
                         ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200"
-                        : "border-transparent bg-slate-900/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                        : "border-transparent bg-transparent text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"
                     }`}
                   >
                     <span>{a.emoji}</span>
                     {a.name}
-                    {busy && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />}
+                    {busy && (
+                      <>
+                        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
+                        <span className="sr-only">Working</span>
+                      </>
+                    )}
                   </button>
                 );
               })}
@@ -309,7 +320,7 @@ export default function Chat({
               </div>
             )}
 
-            <div className="flex items-end gap-2 rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_8px_24px_rgba(17,18,22,0.06)] transition focus-within:border-indigo-500/70 focus-within:ring-2 focus-within:ring-indigo-500/10">
+            <div className="flex items-end gap-2 rounded-2xl border border-slate-500 bg-slate-950 p-2 shadow-[0_8px_24px_rgba(17,18,22,0.06)] transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10">
               <textarea
                 ref={inputRef}
                 aria-label={placeholder}
@@ -359,7 +370,7 @@ function LiveBubble({ run, onStop }: { run: LiveRun; onStop: () => void }) {
   return (
     <div className="flex items-start gap-2.5">
       <AgentAvatar emoji={run.agentEmoji} />
-      <div className="max-w-[72%] min-w-0">
+      <div className="crm-agent-turn max-w-[80%] min-w-0">
         <div className="mb-1 flex items-baseline gap-2 pl-1">
           <span className="text-xs font-semibold text-slate-200">{run.agentName}</span>
           <span className="text-[11px] text-slate-400">working…</span>
@@ -379,7 +390,7 @@ function LiveBubble({ run, onStop }: { run: LiveRun; onStop: () => void }) {
           </div>
         )}
 
-        <div className="rounded-2xl rounded-tl-sm border border-slate-800/80 bg-slate-950/95 px-4 py-3 text-sm leading-relaxed text-slate-200 shadow-[0_6px_18px_rgba(17,18,22,0.05)]">
+        <div className="rounded-2xl rounded-tl-sm border border-slate-800/75 bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-200">
           {run.text ? (
             <span className="whitespace-pre-wrap">{run.text}</span>
           ) : (
@@ -642,7 +653,7 @@ function MessageBubble({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[72%]">
+        <div className="crm-user-turn max-w-[66%]">
           <div className="whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-2.5 text-sm leading-relaxed text-white shadow-[0_5px_14px_rgba(89,64,180,0.18)]">
             {withMentions(message.content, agents)}
           </div>
@@ -658,18 +669,18 @@ function MessageBubble({
   return (
     <div className="flex items-start gap-2.5">
       <AgentAvatar emoji={message.agent_emoji ?? "🤖"} />
-      <div className="max-w-[72%] min-w-0">
+      <div className="crm-agent-turn max-w-[80%] min-w-0">
         <div className="mb-1 flex items-baseline gap-2 pl-1">
           <span className="text-xs font-semibold text-slate-200">{message.agent_name ?? "Agent"}</span>
           <span className="text-[11px] text-slate-400">{fmtTime(message.created_at)}</span>
         </div>
         <div
-          className={`whitespace-pre-wrap rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-[0_6px_18px_rgba(17,18,22,0.05)] ${
+          className={`whitespace-pre-wrap rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed ${
             message.is_error
               ? "border-rose-500/40 bg-rose-950/40 text-rose-200"
               : isHandoff
                 ? "border-dashed border-violet-500/40 bg-violet-950/20 text-violet-200"
-                : "border-slate-800/80 bg-slate-950/95 text-slate-200"
+                : "border-slate-800/75 bg-white/80 text-slate-200"
           }`}
         >
           {message.content}
@@ -682,11 +693,12 @@ function MessageBubble({
           </div>
         )}
 
-        <div className="mt-1.5 flex flex-wrap items-start gap-1.5 pl-1">
+        <div className="mt-1.5 flex flex-wrap items-start gap-2 pl-1">
           {message.trace.length > 0 && (
-            <details className="min-w-0 flex-1">
-              <summary className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-0.5 text-[10px] text-slate-500 hover:text-slate-300">
-                ⚙ {message.trace.length} tool call{message.trace.length > 1 ? "s" : ""} · receipts
+            <details className="group min-w-0">
+              <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[11px] text-slate-400 transition hover:bg-slate-900/65 hover:text-slate-200">
+                <span aria-hidden="true" className="transition-transform group-open:rotate-90">▸</span>
+                <span>⚙ {message.trace.length} tool call{message.trace.length > 1 ? "s" : ""} · receipts</span>
               </summary>
               <div className="mt-1.5 space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
                 {message.trace.map((t, i) => (
@@ -699,7 +711,7 @@ function MessageBubble({
             <button
               onClick={onUndo}
               title="Reverse every change this message made"
-              className="shrink-0 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-0.5 text-[10px] text-slate-500 transition hover:border-amber-500/50 hover:text-amber-300"
+              className="min-h-6 shrink-0 rounded-md px-1 py-0.5 text-[11px] text-slate-400 transition hover:bg-amber-950/60 hover:text-amber-300"
             >
               ↩ Undo {message.undoable} change{message.undoable === 1 ? "" : "s"}
             </button>

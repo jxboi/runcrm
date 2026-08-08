@@ -455,7 +455,7 @@ export default function Workspace() {
   const activeProposals = proposals.filter((proposal) => (proposal.thread_id ?? 1) === activeThreadId);
 
   return (
-    <div className="crm-workspace h-screen">
+    <div className="crm-workspace h-dvh min-h-0">
       <div className="crm-frame flex h-full overflow-hidden">
         <Sidebar
           threads={threads}
@@ -471,7 +471,7 @@ export default function Workspace() {
           workspaceMode={workspaceMode}
           onOpenWorkflowStudio={openWorkflowStudio}
         />
-        <main className={`crm-canvas flex min-w-0 flex-col border-l border-slate-800/90 bg-slate-950 ${workspaceMode === "workflows" ? "w-[400px] shrink-0 border-r 2xl:w-[440px]" : "flex-1 border-r"}`}>
+        <main className={`crm-canvas flex min-w-0 flex-col border-l border-slate-800/90 bg-slate-950 ${workspaceMode === "workflows" ? "w-[clamp(22.5rem,30vw,27.5rem)] shrink-0 border-r" : "flex-1 border-r"}`}>
           <Chat
             key={activeThread.id}
             thread={activeThread}
@@ -526,7 +526,7 @@ export default function Workspace() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-rose-500/40 bg-rose-950/90 px-4 py-2 text-sm text-rose-200 shadow-xl">
+        <div role="alert" className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-rose-500/40 bg-rose-950/90 px-4 py-2 text-sm text-rose-200 shadow-xl">
           {toast}
         </div>
       )}
