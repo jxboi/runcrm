@@ -35,7 +35,7 @@ async function buildSystemPrompt(agent: Agent, thread: ChatThread, workflowId?: 
   const roster = (await listAgents())
     .map(
       (a) =>
-        `- ${a.emoji} ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""}${a.kind === "workflow" ? " — workflow builder" : ""} — ${ENTITIES.map(
+        `- ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""}${a.kind === "workflow" ? " — workflow builder" : ""} — ${ENTITIES.map(
           (e) => `${e}:${a.capabilities[e]}`
         ).join(" ")}`
     )
@@ -269,7 +269,7 @@ export async function runAgentTurn(agent: Agent, opts: RunOptions = {}): Promise
 
     return {
       text: `I stopped after ${MAX_ITERATIONS} tool-use rounds without finishing. Here's where I got:\n${trace
-        .map((t) => `- ${t.tool} ${t.ok ? "✓" : "✗"}`)
+        .map((t) => `- ${t.tool} ${t.ok ? "completed" : "failed"}`)
         .join("\n")}`,
       trace,
       isError: true,

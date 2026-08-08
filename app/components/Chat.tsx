@@ -2,6 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Building2,
+  Check,
+  ChevronRight,
+  CircleX,
+  Home,
+  LoaderCircle,
+  MessageSquare,
+  Pause,
+  Settings2,
+  Sparkles,
+  Square,
+  Undo2,
+  Workflow,
+} from "lucide-react";
+import {
   Agent,
   ChatMessage,
   ChatThread,
@@ -16,6 +31,7 @@ import {
 } from "@/lib/types";
 import { MENTION_PATTERN, nameKey } from "@/lib/agent/mentions";
 import { fmtTime } from "@/lib/client";
+import { AgentIcon } from "@/app/components/AgentIcon";
 
 export default function Chat({
   thread,
@@ -164,7 +180,15 @@ export default function Chat({
         <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm text-slate-400 ring-1 ring-slate-800/80">
-              {workflowContext ? "✦" : thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}
+              {workflowContext ? (
+                <Workflow aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+              ) : thread.account_name ? (
+                <Building2 aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+              ) : thread.id === 1 ? (
+                <Home aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+              ) : (
+                <MessageSquare aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+              )}
             </span>
             <div className="min-w-0">
               <h1 className="truncate text-lg font-semibold leading-5 tracking-tight text-slate-100">
@@ -203,7 +227,7 @@ export default function Chat({
         <div className="mx-auto w-full max-w-[960px] space-y-5">
           {messages.length === 0 && runs.length === 0 && (
             <div className="mx-auto mt-16 max-w-sm rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center">
-              <div className="text-2xl">💬</div>
+              <MessageSquare aria-hidden="true" className="mx-auto h-6 w-6 text-slate-500" strokeWidth={1.6} />
               <div className="mt-2 text-sm font-medium text-slate-300">
                 {workflowContext ? "Build your first workflow" : thread.account_name ? `Start the ${thread.account_name} conversation` : "Start the conversation"}
               </div>
@@ -264,7 +288,10 @@ export default function Chat({
                     : "border-transparent bg-transparent text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"
                 }`}
               >
-                ✨ Auto
+                <span className="inline-flex items-center gap-1.5">
+                  <Sparkles aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  Auto
+                </span>
               </button>
               {agents.map((a) => {
                 const busy = runs.some((r) => r.agentId === a.id);
@@ -280,7 +307,7 @@ export default function Chat({
                         : "border-transparent bg-transparent text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"
                     }`}
                   >
-                    <span>{a.emoji}</span>
+                    <AgentIcon icon={a.emoji} name={a.name} className="h-3.5 w-3.5" />
                     {a.name}
                     {busy && (
                       <>
@@ -309,7 +336,7 @@ export default function Chat({
                       i === highlighted ? "bg-indigo-500/15 text-indigo-100" : "text-slate-300 hover:bg-slate-800"
                     }`}
                   >
-                    <span className="text-sm">{a.emoji}</span>
+                    <AgentIcon icon={a.emoji} name={a.name} className="h-4 w-4" />
                     <span className="flex-1 truncate font-medium">{a.name}</span>
                     <span className="text-[10px] text-slate-500">{a.model.replace("claude-", "")}</span>
                   </button>
@@ -357,10 +384,10 @@ export default function Chat({
   );
 }
 
-function AgentAvatar({ emoji }: { emoji: string }) {
+function AgentAvatar({ icon, name }: { icon?: string | null; name?: string | null }) {
   return (
-    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm shadow-sm ring-1 ring-slate-800/80">
-      {emoji}
+    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-slate-300 shadow-sm ring-1 ring-slate-800/80">
+      <AgentIcon icon={icon} name={name} className="h-4 w-4" />
     </span>
   );
 }
@@ -369,7 +396,7 @@ function AgentAvatar({ emoji }: { emoji: string }) {
 function LiveBubble({ run, onStop }: { run: LiveRun; onStop: () => void }) {
   return (
     <div className="flex items-start gap-2.5">
-      <AgentAvatar emoji={run.agentEmoji} />
+      <AgentAvatar icon={run.agentEmoji} name={run.agentName} />
       <div className="crm-agent-turn max-w-[80%] min-w-0">
         <div className="mb-1 flex items-baseline gap-2 pl-1">
           <span className="text-xs font-semibold text-slate-200">{run.agentName}</span>
@@ -378,7 +405,10 @@ function LiveBubble({ run, onStop }: { run: LiveRun; onStop: () => void }) {
             onClick={onStop}
             className="rounded-md border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400 transition hover:border-rose-500/50 hover:text-rose-300"
           >
-            ■ Stop
+            <span className="inline-flex items-center gap-1">
+              <Square aria-hidden="true" className="h-2.5 w-2.5" fill="currentColor" />
+              Stop
+            </span>
           </button>
         </div>
 
@@ -415,9 +445,9 @@ function LiveStepRow({ step }: { step: LiveStep }) {
   const pending = step.ok === undefined;
   return (
     <div className="font-mono text-[10px] leading-relaxed">
-      <span className={pending ? "text-slate-500" : step.ok ? "text-emerald-400" : "text-rose-400"}>
-        {pending ? "◌" : step.ok ? "✓" : "✗"}
-      </span>{" "}
+      <span className={`mr-1 inline-flex align-middle ${pending ? "text-slate-500" : step.ok ? "text-emerald-400" : "text-rose-400"}`}>
+        {pending ? <LoaderCircle aria-hidden="true" className="h-3 w-3 animate-spin" /> : step.ok ? <Check aria-hidden="true" className="h-3 w-3" /> : <CircleX aria-hidden="true" className="h-3 w-3" />}
+      </span>
       <span className="text-indigo-300">{step.tool}</span>
       <span className="text-slate-500">({JSON.stringify(step.input).slice(1, -1).slice(0, 120)})</span>
       {step.ms !== undefined && <span className="ml-1 text-slate-600">{formatMs(step.ms)}</span>}
@@ -488,11 +518,13 @@ function TraceRow({ entry, onFocusRecord }: { entry: TraceEntry; onFocusRecord: 
   return (
     <div className="font-mono text-[10px] leading-relaxed">
       <button onClick={() => setOpen((o) => !o)} className="w-full text-left hover:opacity-80">
-        <span className={entry.ok ? "text-emerald-400" : "text-rose-400"}>{entry.ok ? "✓" : "✗"}</span>{" "}
+        <span className={`mr-1 inline-flex align-middle ${entry.ok ? "text-emerald-400" : "text-rose-400"}`}>
+          {entry.ok ? <Check aria-hidden="true" className="h-3 w-3" /> : <CircleX aria-hidden="true" className="h-3 w-3" />}
+        </span>
         <span className="text-indigo-300">{entry.tool}</span>
         <span className="text-slate-500">({JSON.stringify(entry.input).slice(1, -1).slice(0, 120)})</span>
         {entry.ms !== undefined && <span className="ml-1 text-slate-600">{formatMs(entry.ms)}</span>}
-        <span className="ml-1 text-slate-600">{open ? "▾" : "▸"}</span>
+        <ChevronRight aria-hidden="true" className={`ml-1 inline h-3 w-3 text-slate-600 transition-transform ${open ? "rotate-90" : ""}`} />
       </button>
 
       {entry.refs && entry.refs.length > 0 && <RefChips refs={entry.refs} onFocus={onFocusRecord} />}
@@ -602,7 +634,8 @@ function ProposalCard({
     <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
-          ⏸ Waiting for you
+          <Pause aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
+          Waiting for you
         </div>
         {proposal.tool === "create_contact" && (
           <span className="text-[10px] text-amber-200/70">Not created yet</span>
@@ -668,7 +701,7 @@ function MessageBubble({
 
   return (
     <div className="flex items-start gap-2.5">
-      <AgentAvatar emoji={message.agent_emoji ?? "🤖"} />
+      <AgentAvatar icon={message.agent_emoji} name={message.agent_name} />
       <div className="crm-agent-turn max-w-[80%] min-w-0">
         <div className="mb-1 flex items-baseline gap-2 pl-1">
           <span className="text-xs font-semibold text-slate-200">{message.agent_name ?? "Agent"}</span>
@@ -697,8 +730,9 @@ function MessageBubble({
           {message.trace.length > 0 && (
             <details className="group min-w-0">
               <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[11px] text-slate-400 transition hover:bg-slate-900/65 hover:text-slate-200">
-                <span aria-hidden="true" className="transition-transform group-open:rotate-90">▸</span>
-                <span>⚙ {message.trace.length} tool call{message.trace.length > 1 ? "s" : ""} · receipts</span>
+                <ChevronRight aria-hidden="true" className="h-3 w-3 transition-transform group-open:rotate-90" />
+                <Settings2 aria-hidden="true" className="h-3 w-3" />
+                <span>{message.trace.length} tool call{message.trace.length > 1 ? "s" : ""} · receipts</span>
               </summary>
               <div className="mt-1.5 space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
                 {message.trace.map((t, i) => (
@@ -713,7 +747,10 @@ function MessageBubble({
               title="Reverse every change this message made"
               className="min-h-6 shrink-0 rounded-md px-1 py-0.5 text-[11px] text-slate-400 transition hover:bg-amber-950/60 hover:text-amber-300"
             >
-              ↩ Undo {message.undoable} change{message.undoable === 1 ? "" : "s"}
+              <span className="inline-flex items-center gap-1">
+                <Undo2 aria-hidden="true" className="h-3 w-3" />
+                Undo {message.undoable} change{message.undoable === 1 ? "" : "s"}
+              </span>
             </button>
           )}
         </div>

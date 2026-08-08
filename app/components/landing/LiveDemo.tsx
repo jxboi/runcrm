@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, LoaderCircle, LockKeyhole } from "lucide-react";
+import { AgentIcon } from "@/app/components/AgentIcon";
 
 /* -------------------------------------------------------------- the script */
 
@@ -17,12 +19,12 @@ type Beat =
 
 type Stage = "lead" | "qualified" | "proposal" | "won" | "lost";
 type DealRow = { id: number; title: string; company: string; value: number; stage: Stage };
-type TaskRow = { id: number; title: string; emoji: string };
+type TaskRow = { id: number; title: string; icon: string };
 
 type Scene = {
   tab: string;
   blurb: string;
-  agent: { name: string; emoji: string; badge: string };
+  agent: { name: string; icon: string; badge: string };
   deals: DealRow[];
   tasks: TaskRow[];
   beats: Beat[];
@@ -35,15 +37,15 @@ const BASE_DEALS: DealRow[] = [
 ];
 
 const BASE_TASKS: TaskRow[] = [
-  { id: 31, title: "Chase Umbrella security review", emoji: "🤝" },
-  { id: 29, title: "Monday pipeline brief", emoji: "📊" },
+  { id: 31, title: "Chase Umbrella security review", icon: "briefcase" },
+  { id: 29, title: "Monday pipeline brief", icon: "chart" },
 ];
 
 const SCENES: Scene[] = [
   {
     tab: "The record keeps itself",
     blurb: "One sentence after a call. Four writes, every one of them traced.",
-    agent: { name: "Sales Assistant", emoji: "🤝", badge: "write · contacts, deals, activities, tasks" },
+    agent: { name: "Sales Assistant", icon: "briefcase", badge: "write · contacts, deals, activities, tasks" },
     deals: BASE_DEALS,
     tasks: BASE_TASKS,
     beats: [
@@ -73,7 +75,7 @@ const SCENES: Scene[] = [
         ms: 88,
         result: "task #34",
       },
-      { k: "task", task: { id: 34, title: "Send Globex proposal — Friday", emoji: "🙋" } },
+      { k: "task", task: { id: 34, title: "Send Globex proposal — Friday", icon: "user" } },
       {
         k: "say",
         text: "Done. Globex is in proposal, the call is logged against deal #7, and Friday's proposal is on your list — not mine, since it needs your numbers. I left the $48,000 alone; you didn't say it moved.",
@@ -83,7 +85,7 @@ const SCENES: Scene[] = [
   {
     tab: "The badge is the boundary",
     blurb: "The Analyst is read-only. Not discouraged from writing — incapable of it.",
-    agent: { name: "Analyst", emoji: "📊", badge: "read · everywhere · write · nothing" },
+    agent: { name: "Analyst", icon: "chart", badge: "read · everywhere · write · nothing" },
     deals: BASE_DEALS,
     tasks: BASE_TASKS,
     beats: [
@@ -347,7 +349,7 @@ function Stage({
         {/* Chat */}
         <div className="flex min-h-[420px] min-w-0 flex-col border-slate-800/80 lg:border-r">
           <div className="flex min-w-0 items-center gap-2 border-b border-slate-800/60 px-4 py-2">
-            <span className="text-sm">{scene.agent.emoji}</span>
+            <AgentIcon icon={scene.agent.icon} name={scene.agent.name} className="h-4 w-4" />
             <span className="shrink-0 text-xs font-semibold text-slate-300">{scene.agent.name}</span>
             <span className="min-w-0 truncate font-mono text-[10px] text-slate-600">
               {scene.agent.badge}
@@ -436,7 +438,7 @@ function Stage({
                     flash === `task-${t.id}` ? "rc-flash" : ""
                   }`}
                 >
-                  <span className="text-[11px]">{t.emoji}</span>
+                  <AgentIcon icon={t.icon} name={t.title} className="h-3.5 w-3.5 text-slate-500" />
                   <span className="truncate">{t.title}</span>
                 </div>
               ))}
@@ -462,7 +464,7 @@ function AgentTurn({
   return (
     <div className="flex items-start gap-2.5">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-sm">
-        {scene.agent.emoji}
+        <AgentIcon icon={scene.agent.icon} name={scene.agent.name} className="h-4 w-4" />
       </span>
       <div className="min-w-0 max-w-[88%]">
         <div className="mb-1 flex items-baseline gap-2 pl-1">
@@ -476,15 +478,15 @@ function AgentTurn({
               <div key={i} className="break-words font-mono text-[10px] leading-relaxed">
                 {s.blocked ? (
                   <>
-                    <span className="text-rose-400">🔒</span>{" "}
+                    <LockKeyhole aria-hidden="true" className="mr-1 inline h-3 w-3 text-rose-400" />
                     <span className="text-slate-500 line-through">{s.tool}</span>
                     <span className="ml-1.5 text-rose-300/80">{s.blocked}</span>
                   </>
                 ) : (
                   <>
-                    <span className={s.result ? "text-emerald-400" : "text-slate-500"}>
-                      {s.result ? "✓" : "◌"}
-                    </span>{" "}
+                    <span className={`mr-1 inline-flex align-middle ${s.result ? "text-emerald-400" : "text-slate-500"}`}>
+                      {s.result ? <Check aria-hidden="true" className="h-3 w-3" /> : <LoaderCircle aria-hidden="true" className="h-3 w-3 animate-spin" />}
+                    </span>
                     <span className="text-indigo-300">{s.tool}</span>
                     <span className="text-slate-500">({s.input})</span>
                     {s.ms !== undefined && <span className="ml-1 text-slate-600">{s.ms}ms</span>}

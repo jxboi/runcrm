@@ -42,7 +42,7 @@ import { executeTool } from "./tools";
 const autoAgent: Agent = {
   id: 7,
   name: "Sales",
-  emoji: "💼",
+  emoji: "briefcase",
   kind: "general",
   instructions: "",
   capabilities: { contacts: "write", deals: "none", activities: "none", tasks: "none", sales_reps: "none" },

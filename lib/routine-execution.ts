@@ -34,7 +34,7 @@ export async function executeRoutineRun(
     const triggerMessage = await insertMessage({
       role: "user",
       thread_id: thread.id,
-      content: `⏰ Routine #${routine.id} · ${routine.name}\nAssigned to ${agent.name}: ${routine.instructions}\nComplete this routine now with your tools, then report the outcome.`,
+      content: `Routine #${routine.id} · ${routine.name}\nAssigned to ${agent.name}: ${routine.instructions}\nComplete this routine now with your tools, then report the outcome.`,
     });
     await setRoutineRunTriggerMessage(run.id, triggerMessage.id);
     emit({ type: "user_message", message: triggerMessage });

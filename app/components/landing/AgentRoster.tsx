@@ -1,4 +1,5 @@
 import { AccessLevel, Capabilities, ENTITIES } from "@/lib/types";
+import { AgentIcon } from "@/app/components/AgentIcon";
 
 /** Same three states, same three colours the workspace sidebar uses. */
 const DOT: Record<AccessLevel, string> = {
@@ -8,7 +9,7 @@ const DOT: Record<AccessLevel, string> = {
 };
 
 type Hire = {
-  emoji: string;
+  icon: string;
   name: string;
   brief: string;
   capabilities: Capabilities;
@@ -25,42 +26,42 @@ const caps = (
 
 const ROSTER: Hire[] = [
   {
-    emoji: "🔍",
+    icon: "search",
     name: "The Researcher",
     brief: "Enrich inbound leads, build the account dossier, dedupe on sight.",
     capabilities: caps("write", "read", "write", "read"),
     status: "live",
   },
   {
-    emoji: "📊",
+    icon: "chart",
     name: "The Analyst",
     brief: "Read-only everywhere. Answer any pipeline question with receipts.",
     capabilities: caps("read", "read", "read", "read"),
     status: "live",
   },
   {
-    emoji: "🤝",
+    icon: "briefcase",
     name: "The Sales Assistant",
     brief: "Draft the follow-up, log the call, keep every record current.",
     capabilities: caps("write", "write", "write", "write"),
     status: "live",
   },
   {
-    emoji: "🧹",
+    icon: "trash",
     name: "The Janitor",
     brief: "Sweep for stale stages and orphaned deals. File fix-it proposals.",
     capabilities: caps("read", "read", "read", "write"),
     status: "live",
   },
   {
-    emoji: "⏰",
+    icon: "clock",
     name: "The Renewals Watchdog",
     brief: "Own the renewal calendar. Wake on date windows, not on messages.",
     capabilities: caps("read", "write", "write", "write"),
     status: "next",
   },
   {
-    emoji: "🧭",
+    icon: "compass",
     name: "The Coordinator",
     brief: "Split a big ask into tasks, route each to whoever holds the badge.",
     capabilities: caps("none", "read", "none", "write"),
@@ -78,7 +79,7 @@ export default function AgentRoster() {
         >
           <div className="flex items-start gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-lg">
-              {hire.emoji}
+              <AgentIcon icon={hire.icon} name={hire.name} className="h-4.5 w-4.5" />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">

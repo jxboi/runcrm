@@ -4,7 +4,7 @@ import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-or
 export const agents = sqliteTable("agents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
-  emoji: text("emoji").notNull().default("🤖"),
+  emoji: text("emoji").notNull().default("bot"),
   kind: text("kind").notNull().default("general"),
   instructions: text("instructions").notNull().default(""),
   capabilities: text("capabilities").notNull().default("{}"),

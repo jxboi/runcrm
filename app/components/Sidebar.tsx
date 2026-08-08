@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { Building2, ChevronRight, Home, MessageSquare, Pencil, Plus, Workflow } from "lucide-react";
 import { fmtTime } from "@/lib/client";
 import { Agent, ChatThread, ENTITIES, Recipient } from "@/lib/types";
+import { AgentIcon } from "@/app/components/AgentIcon";
 
 const ACCESS_DOT: Record<string, string> = {
   none: "bg-slate-500",
@@ -18,65 +20,9 @@ const ENTITY_LABEL: Record<(typeof ENTITIES)[number], string> = {
   sales_reps: "sales reps",
 };
 
-type IconProps = { className?: string };
-
-function PlusIcon({ className = "h-3.5 w-3.5" }: IconProps) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="M10 4v12M4 10h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon({ className = "h-4 w-4" }: IconProps) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="m7.5 4.75 5 5.25-5 5.25" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
-    </svg>
-  );
-}
-
-function PencilIcon({ className = "h-3.5 w-3.5" }: IconProps) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="m13.9 3.85 2.25 2.25M4.25 15.75l.65-3.2 8.55-8.55a1.6 1.6 0 0 1 2.25 0l.3.3a1.6 1.6 0 0 1 0 2.25L7.45 15.1l-3.2.65Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function WorkflowIcon({ className = "h-4 w-4" }: IconProps) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="M11.2 2.75 5.4 10h4.1l-.7 7.25 5.8-8.5h-4.1l.7-6Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function ThreadIcon({ kind, className = "h-4 w-4" }: IconProps & { kind: "home" | "account" | "chat" }) {
-  if (kind === "home") {
-    return (
-      <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-        <path d="m3.5 9 6.5-5.5L16.5 9v6.75a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75V9Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-        <path d="M8 16.5v-4.25h4v4.25" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
-      </svg>
-    );
-  }
-
-  if (kind === "account") {
-    return (
-      <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-        <path d="M3.75 17V4.75a1 1 0 0 1 1-1h7.5a1 1 0 0 1 1 1V17M13.25 8h2a1 1 0 0 1 1 1v8M2.5 17h15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.45" />
-        <path d="M6.5 7h.01M10.5 7h.01M6.5 10.25h.01M10.5 10.25h.01M6.5 13.5h.01M10.5 13.5h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="M4.25 4.25h11.5a1.5 1.5 0 0 1 1.5 1.5v6.5a1.5 1.5 0 0 1-1.5 1.5H9l-3.75 2.5v-2.5h-1a1.5 1.5 0 0 1-1.5-1.5v-6.5a1.5 1.5 0 0 1 1.5-1.5Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-      <path d="M6.5 9h.01M10 9h.01M13.5 9h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-    </svg>
-  );
+function ThreadIcon({ kind, className = "h-4 w-4" }: { kind: "home" | "account" | "chat"; className?: string }) {
+  const Icon = kind === "home" ? Home : kind === "account" ? Building2 : MessageSquare;
+  return <Icon aria-hidden="true" className={className} strokeWidth={1.8} />;
 }
 
 function SectionAction({
@@ -99,7 +45,7 @@ function SectionAction({
       onClick={onClick}
       title={title}
     >
-      <PlusIcon />
+      <Plus aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
       {children}
     </button>
   );
@@ -180,13 +126,13 @@ export default function Sidebar({
                 : "border-slate-800 bg-slate-900/80 text-slate-400 group-hover:border-indigo-500/20 group-hover:bg-indigo-500/10 group-hover:text-indigo-400"
             }`}
           >
-            <WorkflowIcon />
+            <Workflow aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-semibold text-slate-200">Workflow Studio</span>
             <span className="mt-0.5 block truncate text-[11px] text-slate-400">Build automations with AI</span>
           </span>
-          <ChevronRightIcon className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-indigo-400" />
+          <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-indigo-400" strokeWidth={1.8} />
         </button>
       </div>
 
@@ -287,7 +233,7 @@ export default function Sidebar({
                     }`}
                   >
                     <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${selected ? "bg-indigo-950 text-indigo-300 ring-1 ring-indigo-500/20" : "bg-slate-800/80"}`}>
-                      {agent.emoji}
+                      <AgentIcon icon={agent.emoji} name={agent.name} className="h-4.5 w-4.5" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
@@ -333,7 +279,7 @@ export default function Sidebar({
                     className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg border border-transparent bg-slate-950/90 text-slate-500 opacity-0 shadow-sm transition-all hover:border-slate-700 hover:text-slate-200 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
                     title={`Edit ${agent.name}`}
                   >
-                    <PencilIcon />
+                    <Pencil aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
                   </button>
                 </div>
               );
@@ -350,7 +296,7 @@ export default function Sidebar({
             <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
             <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
           </span>
-          <ChevronRightIcon className="h-3.5 w-3.5 text-slate-500 transition-transform group-open:rotate-90" />
+          <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 text-slate-500 transition-transform group-open:rotate-90" strokeWidth={1.8} />
         </summary>
         <div className="px-4 pb-4">
           <div className="flex items-center gap-3 text-[10px] text-slate-400">

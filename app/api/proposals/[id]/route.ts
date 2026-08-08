@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const note = await insertMessage({
       role: "user",
       thread_id: threadId,
-      content: `✕ Rejected ${proposal.agent_name ?? "agent"}'s proposed ${proposal.tool}. Nothing was changed.`,
+      content: `Rejected ${proposal.agent_name ?? "agent"}'s proposed ${proposal.tool}. Nothing was changed.`,
     });
     return NextResponse.json({ proposal: decided, note });
   }
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const note = await insertMessage({
     role: "user",
     thread_id: threadId,
-    content: `✓ Approved ${agent.name}'s ${proposal.tool}${touched ? ` — ${touched}` : ""}.`,
+    content: `Approved ${agent.name}'s ${proposal.tool}${touched ? ` — ${touched}` : ""}.`,
     trace: [
       {
         tool: proposal.tool,

@@ -138,7 +138,7 @@ export async function createAgent(input: {
   }
   const result = await run(
     "INSERT INTO agents (name, emoji, instructions, capabilities, autonomy, model) VALUES (?, ?, ?, ?, ?, ?)",
-    [input.name.trim(), input.emoji?.trim() || "🤖", input.instructions ?? "", JSON.stringify(caps), input.autonomy === "ask" ? "ask" : "auto", input.model || "claude-opus-5"],
+    [input.name.trim(), input.emoji?.trim() || "bot", input.instructions ?? "", JSON.stringify(caps), input.autonomy === "ask" ? "ask" : "auto", input.model || "claude-opus-5"],
   );
   return (await getAgent(Number(result.meta.last_row_id)))!;
 }
@@ -156,7 +156,7 @@ export async function updateAgent(id: number, input: {
   const autonomy = input.autonomy === "ask" || input.autonomy === "auto" ? input.autonomy : existing.autonomy;
   await run("UPDATE agents SET name = ?, emoji = ?, instructions = ?, capabilities = ?, autonomy = ?, model = ? WHERE id = ?", [
     (input.name ?? existing.name).trim(),
-    (input.emoji ?? existing.emoji).trim() || "🤖",
+    (input.emoji ?? existing.emoji).trim() || "bot",
     input.instructions ?? existing.instructions,
     JSON.stringify(caps),
     autonomy,

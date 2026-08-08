@@ -1,6 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { CalendarDays, ChevronRight, FileText, Mail, Phone, Play, RefreshCw, UserRound, type LucideIcon } from "lucide-react";
 import {
   Activity,
   Agent,
@@ -14,6 +15,7 @@ import {
   Task,
 } from "@/lib/types";
 import { api, fmtMoney, fmtTime } from "@/lib/client";
+import { AgentIcon } from "@/app/components/AgentIcon";
 import RoutinesTab from "./RoutinesTab";
 
 type Tab = "contacts" | "sales_reps" | "deals" | "tasks" | "routines" | "activity";
@@ -131,7 +133,17 @@ const TASK_PILL: Record<string, string> = {
   failed: "bg-rose-500/15 text-rose-300 border-rose-500/30",
 };
 
-const ACTIVITY_ICON: Record<string, string> = { note: "📝", call: "📞", email: "✉️", meeting: "🗓️" };
+const ACTIVITY_ICON: Record<string, LucideIcon> = {
+  note: FileText,
+  call: Phone,
+  email: Mail,
+  meeting: CalendarDays,
+};
+
+function ActivityTypeIcon({ type }: { type: string }) {
+  const Icon = ACTIVITY_ICON[type] ?? FileText;
+  return <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />;
+}
 
 function Pill({ text, map }: { text: string; map: Record<string, string> }) {
   return (
@@ -949,14 +961,14 @@ function TasksTab({
               <optgroup label="AI agents">
                 {agents.map((a) => (
                   <option key={a.id} value={`agent:${a.id}`}>
-                    {a.emoji} {a.name}
+                    {a.name}
                   </option>
                 ))}
               </optgroup>
               <optgroup label="Sales reps">
                 {salesReps.map((salesRep) => (
                   <option key={salesRep.id} value={`rep:${salesRep.id}`}>
-                    👤 {salesRepLabel(salesRep)}
+                    {salesRepLabel(salesRep)}
                   </option>
                 ))}
               </optgroup>
@@ -989,12 +1001,14 @@ function TasksTab({
                   {t.description && <div className="mt-0.5 text-[11px] leading-relaxed text-slate-400">{t.description}</div>}
                   <div className="mt-1.5 flex items-center gap-2">
                     <Pill text={isRunning ? "running" : t.status} map={TASK_PILL} />
-                    <span className="text-[11px] text-slate-400">
-                      {t.assignee_name
-                        ? `${t.assignee_emoji ?? ""} ${t.assignee_name}`
-                        : t.assignee_sales_rep_name
-                          ? `👤 ${t.assignee_sales_rep_name}`
-                          : "Unassigned"}
+                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                      {t.assignee_name ? (
+                        <><AgentIcon icon={t.assignee_emoji} name={t.assignee_name} className="h-3 w-3" />{t.assignee_name}</>
+                      ) : t.assignee_sales_rep_name ? (
+                        <><UserRound aria-hidden="true" className="h-3 w-3" />{t.assignee_sales_rep_name}</>
+                      ) : (
+                        "Unassigned"
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1004,14 +1018,17 @@ function TasksTab({
                     disabled={assigneeBusy || isRunning}
                     className="min-h-6 shrink-0 rounded-md border border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300 transition enabled:hover:bg-indigo-500/25 disabled:opacity-40"
                   >
-                    {isRunning ? "Running…" : t.status === "todo" ? "▶ Run" : "↻ Re-run"}
+                    <span className="inline-flex items-center gap-1">
+                      {t.status === "todo" ? <Play aria-hidden="true" className="h-3 w-3" /> : <RefreshCw aria-hidden="true" className={`h-3 w-3 ${isRunning ? "animate-spin" : ""}`} />}
+                      {isRunning ? "Running…" : t.status === "todo" ? "Run" : "Re-run"}
+                    </span>
                   </button>
                 )}
               </div>
               {t.result && (
                 <details className="group mt-2">
                   <summary className="inline-flex min-h-6 items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200">
-                    <span aria-hidden="true" className="transition-transform group-open:rotate-90">▸</span>
+                    <ChevronRight aria-hidden="true" className="h-3 w-3 transition-transform group-open:rotate-90" />
                     Show result
                   </summary>
                   <div className="mt-1 whitespace-pre-wrap rounded-md border border-slate-800 bg-slate-950 p-2 text-[11px] leading-relaxed text-slate-400">
@@ -1042,7 +1059,7 @@ function ActivityTab({ activities, focusedId }: { activities: Activity[]; focuse
           className={`${RECORD_ROW_CLASS} py-3${focusClass(focusedId, "activities", a.id)}`}
         >
           <div className="flex items-start gap-2">
-            <span className="text-sm">{ACTIVITY_ICON[a.type] ?? "📝"}</span>
+            <span className="mt-0.5 text-slate-400"><ActivityTypeIcon type={a.type} /></span>
             <div className="min-w-0 flex-1">
               <div className="text-[12px] leading-relaxed text-slate-300">{a.content}</div>
               <div className="mt-1 text-[11px] text-slate-400">

@@ -34,6 +34,6 @@ export async function POST(req: NextRequest) {
     skipped.length ? `Left alone: ${skipped.join("; ")}.` : "",
   ].filter(Boolean);
 
-  const note = await insertMessage({ role: "user", thread_id: target.thread_id, content: `↩ ${parts.join(" ")}` });
+  const note = await insertMessage({ role: "user", thread_id: target.thread_id, content: `Undo: ${parts.join(" ")}` });
   return NextResponse.json({ undone, skipped, note, message: await getMessage(messageId) });
 }

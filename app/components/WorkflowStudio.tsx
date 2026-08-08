@@ -1,18 +1,46 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  ChevronRight,
+  Circle,
+  CircleMinus,
+  CircleX,
+  Clock3,
+  GitBranch,
+  List,
+  LoaderCircle,
+  Maximize2,
+  Pause,
+  Play,
+  Plus,
+  TriangleAlert,
+  X,
+  Zap,
+  ZoomIn,
+  ZoomOut,
+  type LucideIcon,
+} from "lucide-react";
 import { Workflow, WorkflowEdge, WorkflowNode, WorkflowNodeKind, WorkflowRun, WorkflowVersion } from "@/lib/types";
 import { api, fmtTime } from "@/lib/client";
 
 type StudioTab = "preview" | "versions" | "runs";
 
-const KIND_META: Record<WorkflowNodeKind, { icon: string; label: string; className: string }> = {
-  trigger: { icon: "↯", label: "Trigger", className: "border-violet-400/60 bg-violet-500/10 text-violet-300" },
-  condition: { icon: "◇", label: "Condition", className: "border-amber-400/60 bg-amber-500/10 text-amber-300" },
-  action: { icon: "→", label: "Action", className: "border-sky-400/60 bg-sky-500/10 text-sky-300" },
-  delay: { icon: "◷", label: "Delay", className: "border-slate-500/60 bg-slate-500/10 text-slate-400" },
-  ai_agent: { icon: "✦", label: "AI agent", className: "border-indigo-400/70 bg-indigo-500/12 text-indigo-300" },
+const KIND_META: Record<WorkflowNodeKind, { Icon: LucideIcon; label: string; className: string }> = {
+  trigger: { Icon: Zap, label: "Trigger", className: "border-violet-400/60 bg-violet-500/10 text-violet-300" },
+  condition: { Icon: GitBranch, label: "Condition", className: "border-amber-400/60 bg-amber-500/10 text-amber-300" },
+  action: { Icon: ArrowRight, label: "Action", className: "border-sky-400/60 bg-sky-500/10 text-sky-300" },
+  delay: { Icon: Clock3, label: "Delay", className: "border-slate-500/60 bg-slate-500/10 text-slate-400" },
+  ai_agent: { Icon: Bot, label: "AI agent", className: "border-indigo-400/70 bg-indigo-500/12 text-indigo-300" },
 };
+
+function NodeKindIcon({ kind, className = "h-4 w-4" }: { kind: WorkflowNodeKind; className?: string }) {
+  const Icon = KIND_META[kind].Icon;
+  return <Icon aria-hidden="true" className={className} strokeWidth={1.8} />;
+}
 
 const PROMPTS = [
   {
@@ -194,10 +222,10 @@ export default function WorkflowStudio({
           : "border-slate-700 bg-white text-slate-400 hover:border-indigo-500/35 hover:text-indigo-300"
       }`}
     >
-      <WorkflowListIcon />
+      <List aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
       <span className="hidden 2xl:inline">Workflows</span>
       <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] tabular-nums text-slate-500">{workflows.length}</span>
-      <ChevronIcon className={`hidden h-3 w-3 transition-transform 2xl:block ${workflowListOpen ? "rotate-180" : ""}`} />
+      <ChevronRight aria-hidden="true" className={`hidden h-3 w-3 transition-transform 2xl:block ${workflowListOpen ? "rotate-180" : ""}`} />
     </button>
   );
 
@@ -228,7 +256,7 @@ export default function WorkflowStudio({
                 title={errors.length ? "Fix validation errors before testing" : "Run a dry test with sample data"}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-white px-2.5 text-[11px] font-medium text-slate-300 shadow-sm transition hover:border-indigo-500/50 hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-40 xl:px-3"
               >
-                <span aria-hidden="true" className={testing ? "animate-pulse" : ""}>▷</span>
+                <Play aria-hidden="true" className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
                 <span className="hidden xl:inline">{testing ? "Testing…" : "Test"}</span>
               </button>
               <button
@@ -239,7 +267,7 @@ export default function WorkflowStudio({
                 title={selected.status !== "active" ? "Activate the workflow before running it live" : "Execute live actions now"}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 text-[11px] font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40 xl:px-3"
               >
-                <span aria-hidden="true" className={running ? "animate-pulse" : ""}>▶</span>
+                <Play aria-hidden="true" className={`h-3.5 w-3.5 ${running ? "animate-pulse" : ""}`} fill="currentColor" />
                 <span className="hidden xl:inline">{running ? "Running…" : "Run now"}</span>
               </button>
               <button
@@ -253,12 +281,12 @@ export default function WorkflowStudio({
                     : "bg-indigo-600 text-white hover:bg-indigo-500"
                 }`}
               >
-                <span aria-hidden="true">{selected.status === "active" ? "Ⅱ" : "✓"}</span>
+                {selected.status === "active" ? <Pause aria-hidden="true" className="h-3.5 w-3.5" /> : <Check aria-hidden="true" className="h-3.5 w-3.5" />}
                 <span className="hidden xl:inline">{selected.status === "active" ? "Pause" : "Activate"}</span>
               </button>
             </>
           )}
-          <button type="button" onClick={onClose} aria-label="Close Workflow Studio" className="ml-1 rounded-lg px-2 py-1 text-base text-slate-500 transition hover:bg-slate-900 hover:text-slate-200">×</button>
+          <button type="button" onClick={onClose} aria-label="Close Workflow Studio" className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-900 hover:text-slate-200"><X aria-hidden="true" className="h-4 w-4" /></button>
         </div>
       </header>
 
@@ -283,18 +311,18 @@ export default function WorkflowStudio({
                 <div className="ml-auto flex items-center gap-2 text-[10px] xl:gap-3">
                   {errors.length === 0 ? (
                     <span role="status" aria-label="Workflow is valid" className="text-emerald-400">
-                      <span aria-hidden="true" className="xl:hidden">✓</span>
-                      <span className="hidden xl:inline">✓ Valid</span>
+                      <Check aria-hidden="true" className="inline h-3.5 w-3.5 xl:hidden" />
+                      <span className="hidden items-center gap-1 xl:inline-flex"><Check aria-hidden="true" className="h-3.5 w-3.5" />Valid</span>
                     </span>
                   ) : (
                     <span role="status" aria-label={`${errors.length} workflow error${errors.length === 1 ? "" : "s"}`} className="text-rose-400">
-                      <span aria-hidden="true" className="xl:hidden">{errors.length}!</span>
+                      <span className="inline-flex items-center gap-0.5 xl:hidden"><CircleX aria-hidden="true" className="h-3.5 w-3.5" />{errors.length}</span>
                       <span className="hidden xl:inline">{errors.length} error{errors.length === 1 ? "" : "s"}</span>
                     </span>
                   )}
                   {warnings.length > 0 && (
                     <span role="status" aria-label={`${warnings.length} setup note${warnings.length === 1 ? "" : "s"}`} className="text-amber-400">
-                      <span aria-hidden="true" className="xl:hidden">{warnings.length}△</span>
+                      <span className="inline-flex items-center gap-0.5 xl:hidden"><TriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />{warnings.length}</span>
                       <span className="hidden xl:inline">{warnings.length} setup note{warnings.length === 1 ? "" : "s"}</span>
                     </span>
                   )}
@@ -344,7 +372,7 @@ export default function WorkflowStudio({
               }}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
             >
-              <ChevronIcon className="h-4 w-4" />
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
             </button>
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-slate-200">Workflows</div>
@@ -357,7 +385,7 @@ export default function WorkflowStudio({
               onClick={startWorkflow}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-semibold text-white shadow-sm transition-colors hover:bg-indigo-500"
             >
-              <PlusIcon />
+              <Plus aria-hidden="true" className="h-3.5 w-3.5" />
               New
             </button>
           </div>
@@ -379,12 +407,12 @@ export default function WorkflowStudio({
             {!loading && workflows.length === 0 && (
               <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-4 py-6 text-center">
                 <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
-                  <WorkflowListIcon />
+                  <List aria-hidden="true" className="h-4 w-4" />
                 </div>
                 <div className="mt-3 text-xs font-semibold text-slate-300">No workflows yet</div>
                 <p className="mt-1 text-[10px] leading-relaxed text-slate-500">Describe an automation in chat and it will appear here.</p>
-                <button type="button" onClick={startWorkflow} className="mt-4 text-[10px] font-semibold text-indigo-400 hover:text-indigo-300">
-                  Create your first workflow →
+                <button type="button" onClick={startWorkflow} className="mt-4 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-400 hover:text-indigo-300">
+                  Create your first workflow <ArrowRight aria-hidden="true" className="h-3 w-3" />
                 </button>
               </div>
             )}
@@ -432,33 +460,6 @@ export default function WorkflowStudio({
   );
 }
 
-function WorkflowListIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="M6.25 5.25h9M6.25 10h9M6.25 14.75h9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
-      <circle cx="3.5" cy="5.25" r=".8" fill="currentColor" />
-      <circle cx="3.5" cy="10" r=".8" fill="currentColor" />
-      <circle cx="3.5" cy="14.75" r=".8" fill="currentColor" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ className = "h-3 w-3" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="m7.5 4.75 5 5.25-5 5.25" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
-    </svg>
-  );
-}
-
-function PlusIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 20 20">
-      <path d="M10 4v12M4 10h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
 function workflowStatusDot(status: Workflow["status"]) {
   if (status === "active") return "bg-emerald-500 ring-4 ring-emerald-500/10";
   if (status === "paused") return "bg-slate-500 ring-4 ring-slate-500/10";
@@ -473,7 +474,7 @@ function StatusBadge({ status }: { status: Workflow["status"] }) {
       : "border-amber-500/30 bg-amber-500/10 text-amber-300";
   return (
     <span role="status" aria-label={`Status: ${status}`} className={`inline-flex h-5 items-center rounded-full border px-1.5 text-[9px] font-semibold uppercase tracking-wide xl:px-2 ${cls}`}>
-      <span aria-hidden="true" className="xl:hidden">●</span>
+      <Circle aria-hidden="true" className="h-2.5 w-2.5 fill-current xl:hidden" />
       <span className="hidden xl:inline">{status}</span>
     </span>
   );
@@ -483,7 +484,7 @@ function EmptyWorkflowState({ architectName, onDraftPrompt }: { architectName: s
   return (
     <div className="flex flex-1 items-center justify-center overflow-y-auto p-8">
       <div className="w-full max-w-2xl text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-2xl text-indigo-400 shadow-lg shadow-indigo-950/30">✦</div>
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 shadow-lg shadow-indigo-950/30"><Bot aria-hidden="true" className="h-6 w-6" strokeWidth={1.7} /></div>
         <h2 className="mt-5 text-xl font-semibold tracking-tight text-slate-100">Describe it. See it. Refine it.</h2>
         <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
           Tell {architectName} what should start the workflow, what decisions it makes, and what happens next. Every correction stays in chat and becomes a recoverable version.
@@ -586,7 +587,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
             aria-label="Zoom out"
             className="h-7 w-7 rounded-lg text-xs text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
           >
-            −
+            <ZoomOut aria-hidden="true" className="mx-auto h-3.5 w-3.5" />
           </button>
           <span className="w-10 text-center text-[9px] tabular-nums text-slate-500">{Math.round(zoom * 100)}%</span>
           <button
@@ -598,7 +599,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
             aria-label="Zoom in"
             className="h-7 w-7 rounded-lg text-xs text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
           >
-            +
+            <ZoomIn aria-hidden="true" className="mx-auto h-3.5 w-3.5" />
           </button>
           <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-slate-800" />
           <button
@@ -610,7 +611,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
             }}
             className={`rounded-lg px-2 py-1.5 text-[9px] font-medium transition-colors ${fitMode ? "bg-indigo-500/10 text-indigo-400" : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"}`}
           >
-            Fit view
+            <span className="inline-flex items-center gap-1"><Maximize2 aria-hidden="true" className="h-3 w-3" />Fit view</span>
           </button>
         </div>
 
@@ -654,7 +655,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
                   className={`absolute rounded-2xl border bg-slate-950 p-3 text-left shadow-[0_8px_24px_rgba(30,32,38,0.08)] transition hover:-translate-y-0.5 ${selected ? "border-indigo-500 ring-4 ring-indigo-500/10" : "border-slate-700 hover:border-slate-600"}`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold ${meta.className}`}>{meta.icon}</span>
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold ${meta.className}`}><NodeKindIcon kind={node.kind} /></span>
                     <span className="min-w-0">
                       <span className="block text-[9px] font-semibold uppercase tracking-wider text-slate-500">{meta.label}</span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-200">{node.title}</span>
@@ -672,7 +673,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
         <aside className="absolute right-3 top-3 z-20 hidden max-h-[calc(100%-1.5rem)] w-64 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/95 p-4 shadow-[0_16px_42px_rgba(30,32,38,0.14)] backdrop-blur-xl 2xl:block">
           <div className="flex items-start justify-between gap-2">
             <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${KIND_META[selectedNode.kind].className}`}>
-              {KIND_META[selectedNode.kind].icon} {KIND_META[selectedNode.kind].label}
+              <NodeKindIcon kind={selectedNode.kind} className="h-3 w-3" /> {KIND_META[selectedNode.kind].label}
             </div>
             <button
               type="button"
@@ -680,7 +681,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
               onClick={() => setSelectedNodeId(null)}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm text-slate-500 transition-colors hover:bg-slate-900 hover:text-slate-200"
             >
-              ×
+              <X aria-hidden="true" className="h-3.5 w-3.5" />
             </button>
           </div>
           <h3 className="mt-3 text-sm font-semibold text-slate-200">{selectedNode.title}</h3>
@@ -753,11 +754,11 @@ function RunHistory({ runs, onTest, onRun, testing, running, active }: { runs: W
           <div className="mt-5 space-y-3">
             {runs.map((item) => (
               <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/45 p-3">
-                <div className="flex items-center justify-between"><span className={`text-[10px] font-semibold ${item.status === "succeeded" ? "text-emerald-400" : item.status === "failed" ? "text-rose-400" : "text-amber-400"}`}>{item.status === "succeeded" ? `✓ ${item.trigger === "test" ? "Test passed" : "Live run completed"}` : item.status === "failed" ? `× ${item.trigger === "test" ? "Test failed" : "Live run failed"}` : "Running"}</span><span className="text-[9px] text-slate-600">{item.trigger === "test" ? "Test" : "Live"} · v{item.version} · {fmtTime(item.started_at)}</span></div>
+                <div className="flex items-center justify-between"><span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${item.status === "succeeded" ? "text-emerald-400" : item.status === "failed" ? "text-rose-400" : "text-amber-400"}`}>{item.status === "succeeded" ? <Check aria-hidden="true" className="h-3 w-3" /> : item.status === "failed" ? <CircleX aria-hidden="true" className="h-3 w-3" /> : <LoaderCircle aria-hidden="true" className="h-3 w-3 animate-spin" />}{item.status === "succeeded" ? (item.trigger === "test" ? "Test passed" : "Live run completed") : item.status === "failed" ? (item.trigger === "test" ? "Test failed" : "Live run failed") : "Running"}</span><span className="text-[9px] text-slate-600">{item.trigger === "test" ? "Test" : "Live"} · v{item.version} · {fmtTime(item.started_at)}</span></div>
                 <div className="mt-3 space-y-1.5">
                   {item.trace.map((step, index) => (
                     <div key={`${step.node_id}-${index}`} className={`flex gap-2 rounded-lg border px-2.5 py-2 ${step.status === "skipped" ? "border-slate-800/60 opacity-55" : "border-slate-800 bg-slate-950/70"}`}>
-                      <span className={`mt-0.5 ${step.status === "succeeded" ? "text-emerald-400" : step.status === "failed" ? "text-rose-400" : "text-slate-600"}`}>{step.status === "succeeded" ? "✓" : step.status === "failed" ? "×" : "–"}</span>
+                      <span className={`mt-0.5 ${step.status === "succeeded" ? "text-emerald-400" : step.status === "failed" ? "text-rose-400" : "text-slate-600"}`}>{step.status === "succeeded" ? <Check aria-hidden="true" className="h-3 w-3" /> : step.status === "failed" ? <CircleX aria-hidden="true" className="h-3 w-3" /> : <CircleMinus aria-hidden="true" className="h-3 w-3" />}</span>
                       <div><div className="text-[10px] font-medium text-slate-300">{step.node_title}</div><div className="mt-0.5 text-[9px] leading-relaxed text-slate-600">{step.detail}</div></div>
                     </div>
                   ))}

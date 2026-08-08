@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const userMessage = await insertMessage({
       role: "user",
       thread_id: thread.id,
-      content: `📋 Task #${task.id} assigned to ${agent.name}: "${task.title}"${task.description ? ` — ${task.description}` : ""}\nComplete it now with your tools, then report the outcome.`,
+      content: `Task #${task.id} assigned to ${agent.name}: "${task.title}"${task.description ? ` — ${task.description}` : ""}\nComplete it now with your tools, then report the outcome.`,
     });
     emit({ type: "user_message", message: userMessage });
 

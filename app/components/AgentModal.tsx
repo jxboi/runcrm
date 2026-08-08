@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { AccessLevel, Agent, Autonomy, Capabilities, ENTITIES } from "@/lib/types";
-
-const EMOJI_PICKS = ["🤖", "💼", "📊", "🧠", "⚡", "🔍", "📣", "🛠️", "🧾", "🌱"];
+import { AGENT_ICON_OPTIONS, AgentIcon, agentIconKey } from "@/app/components/AgentIcon";
 
 const MODELS: { id: string; label: string }[] = [
   { id: "claude-opus-5", label: "Claude Opus 5 — most capable (default)" },
@@ -25,7 +24,7 @@ export default function AgentModal({
   onDelete: (id: number) => Promise<void>;
 }) {
   const [name, setName] = useState(agent?.name ?? "");
-  const [emoji, setEmoji] = useState(agent?.emoji ?? "🤖");
+  const [iconKey, setIconKey] = useState(() => agentIconKey(agent?.emoji, agent?.name));
   const [model, setModel] = useState(agent?.model ?? "claude-opus-5");
   const [instructions, setInstructions] = useState(agent?.instructions ?? "");
   const [caps, setCaps] = useState<Capabilities>(
@@ -43,7 +42,7 @@ export default function AgentModal({
     setSaving(true);
     setError(null);
     try {
-      await onSave({ name, emoji, model, instructions, capabilities: caps, autonomy }, agent?.id);
+      await onSave({ name, emoji: iconKey, model, instructions, capabilities: caps, autonomy }, agent?.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save");
       setSaving(false);
@@ -66,12 +65,10 @@ export default function AgentModal({
         <div className="mt-5 space-y-4">
           <div className="flex gap-3">
             <div className="w-20">
-              <label className="text-[11px] font-medium text-slate-400">Emoji</label>
-              <input
-                value={emoji}
-                onChange={(e) => setEmoji(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-center text-lg focus:border-indigo-500 focus:outline-none"
-              />
+              <span className="text-[11px] font-medium text-slate-400">Icon</span>
+              <span className="mt-1 flex h-10 w-full items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-indigo-300">
+                <AgentIcon icon={iconKey} name={name} className="h-5 w-5" />
+              </span>
             </div>
             <div className="flex-1">
               <label className="text-[11px] font-medium text-slate-400">Name</label>
@@ -85,16 +82,20 @@ export default function AgentModal({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-1">
-            {EMOJI_PICKS.map((e) => (
+          <div className="grid grid-cols-5 gap-1.5" aria-label="Choose agent icon">
+            {AGENT_ICON_OPTIONS.map(({ key, label, Icon }) => (
               <button
-                key={e}
-                onClick={() => setEmoji(e)}
-                className={`rounded-md px-1.5 py-0.5 text-base transition hover:bg-slate-800 ${
-                  emoji === e ? "bg-slate-800 ring-1 ring-indigo-500" : ""
+                type="button"
+                key={key}
+                aria-label={label}
+                aria-pressed={iconKey === key}
+                title={label}
+                onClick={() => setIconKey(key)}
+                className={`flex h-9 items-center justify-center rounded-lg border transition hover:bg-slate-800 ${
+                  iconKey === key ? "border-indigo-500 bg-indigo-500/10 text-indigo-300" : "border-slate-800 text-slate-400"
                 }`}
               >
-                {e}
+                <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
               </button>
             ))}
           </div>

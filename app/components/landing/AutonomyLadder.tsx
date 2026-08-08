@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Check } from "lucide-react";
+import { AgentIcon } from "@/app/components/AgentIcon";
 
 type Rung = {
   level: string;
@@ -124,11 +126,11 @@ function Artifact({ index }: { index: number }) {
         </p>
         <div className="mt-2 space-y-1 font-mono text-[10px] text-slate-500">
           <div>
-            <span className="text-emerald-400">✓</span> <span className="text-indigo-300">list_deals</span>
+            <Check aria-hidden="true" className="mr-1 inline h-3 w-3 text-emerald-400" /> <span className="text-indigo-300">list_deals</span>
             (&quot;stage&quot;:&quot;proposal&quot;) <span className="text-slate-600">61ms</span>
           </div>
           <div>
-            <span className="text-emerald-400">✓</span>{" "}
+            <Check aria-hidden="true" className="mr-1 inline h-3 w-3 text-emerald-400" />{" "}
             <span className="text-indigo-300">list_activities</span>(&quot;since&quot;:&quot;-14d&quot;){" "}
             <span className="text-slate-600">44ms</span>
           </div>
@@ -197,7 +199,7 @@ function Artifact({ index }: { index: number }) {
       <div className="space-y-1 font-mono text-[10px] leading-relaxed text-slate-500">
         <div>
           02:14 <span className="text-indigo-300">merge_contacts</span> #418 ← #902{" "}
-          <span className="text-slate-600">by 🧹 Janitor</span>
+          <span className="inline-flex items-center gap-1 text-slate-600">by <AgentIcon icon="trash" name="Janitor" className="h-3 w-3" /> Janitor</span>
         </div>
         <div>
           02:14 <span className="text-slate-600">policy: dedupe · exact-email · silent</span>

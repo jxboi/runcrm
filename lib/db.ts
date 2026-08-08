@@ -4,7 +4,7 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS agents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    emoji TEXT NOT NULL DEFAULT '🤖',
+    emoji TEXT NOT NULL DEFAULT 'bot',
     kind TEXT NOT NULL DEFAULT 'general',
     instructions TEXT NOT NULL DEFAULT '',
     capabilities TEXT NOT NULL DEFAULT '{}',
@@ -257,7 +257,7 @@ async function ensureWorkflowAgent(db: D1Database) {
     .prepare("INSERT INTO agents (name, emoji, kind, instructions, capabilities, autonomy, model) VALUES (?, ?, 'workflow', ?, ?, 'auto', ?)")
     .bind(
       "Workflow Architect",
-      "✦",
+      "workflow",
       "Turn plain-language automation ideas into clear, safe, versioned workflows. Always save requested workflow changes with your workflow tools, explain assumptions briefly, and ask the user to inspect the visual preview. Never claim a draft is active unless the activation tool succeeded.",
       JSON.stringify({ contacts: "read", deals: "read", activities: "read", tasks: "read" }),
       "claude-opus-5"
@@ -269,14 +269,14 @@ async function seed(db: D1Database) {
   await db.batch([
     db.prepare("INSERT INTO agents (name, emoji, instructions, capabilities, model) VALUES (?, ?, ?, ?, ?)").bind(
       "Sales Assistant",
-      "💼",
+      "briefcase",
       "You are a proactive sales assistant. Keep the CRM tidy: create and update contacts and deals when asked, log activities for anything noteworthy, and always confirm exactly what you changed (names, IDs, values). Be brief and action-oriented.",
       JSON.stringify({ contacts: "write", deals: "write", activities: "write", tasks: "read" }),
       "claude-opus-5",
     ),
     db.prepare("INSERT INTO agents (name, emoji, instructions, capabilities, model) VALUES (?, ?, ?, ?, ?)").bind(
       "Data Analyst",
-      "📊",
+      "chart",
       "You are a read-only CRM analyst. Answer questions about the pipeline with concrete numbers: totals, counts, stage breakdowns, top deals. Never guess — look the data up with your tools first. Present findings compactly, leading with the headline number.",
       JSON.stringify({ contacts: "read", deals: "read", activities: "read", tasks: "read" }),
       "claude-opus-5",

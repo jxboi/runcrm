@@ -1,3 +1,20 @@
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  ChartNoAxesColumnIncreasing,
+  Check,
+  Circle,
+  Clock3,
+  Compass,
+  Dog,
+  LockKeyhole,
+  Search,
+  Trash2,
+  Undo2,
+  X,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import AgentRoster from "./components/landing/AgentRoster";
 import AutonomyLadder from "./components/landing/AutonomyLadder";
 import LiveDemo from "./components/landing/LiveDemo";
@@ -114,8 +131,10 @@ function Hero() {
             href="/app"
             className="group rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-950/60 transition hover:bg-indigo-500"
           >
-            Open the workspace
-            <span className="ml-1.5 inline-block transition group-hover:translate-x-0.5">→</span>
+            <span className="inline-flex items-center gap-1.5">
+              Open the workspace
+              <ArrowRight aria-hidden="true" className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            </span>
           </a>
           <a
             href="#trust"
@@ -135,15 +154,15 @@ function Hero() {
 
 /* ------------------------------------------------------------------ ticker */
 
-const JOURNAL = [
-  "🤝 Assistant · update_deal #7 · qualified → proposal · 96ms · undo",
-  "🔍 Researcher · enrich_contact #418 · 3 fields filled from the signature block",
-  "📊 Analyst · read-only · answered “what slipped this week?” · 2 receipts",
-  "🧹 Janitor · proposed 6 fixes · waiting on you",
-  "🤝 Assistant · log_activity #212 · call → deal #7 · 71ms · undo",
-  "⏰ Watchdog · Umbrella renewal window opens in 30 days · task #37 created",
-  "🧭 Coordinator · split “clean up EMEA” into 4 tasks · routed by badge",
-  "🔒 Analyst · update_deal denied · read access to deals · 0 rows touched",
+const JOURNAL: ReadonlyArray<{ Icon: LucideIcon; text: string }> = [
+  { Icon: BriefcaseBusiness, text: "Assistant · update_deal #7 · qualified → proposal · 96ms · undo" },
+  { Icon: Search, text: "Researcher · enrich_contact #418 · 3 fields filled from the signature block" },
+  { Icon: ChartNoAxesColumnIncreasing, text: "Analyst · read-only · answered “what slipped this week?” · 2 receipts" },
+  { Icon: Trash2, text: "Janitor · proposed 6 fixes · waiting on you" },
+  { Icon: BriefcaseBusiness, text: "Assistant · log_activity #212 · call → deal #7 · 71ms · undo" },
+  { Icon: Clock3, text: "Watchdog · Umbrella renewal window opens in 30 days · task #37 created" },
+  { Icon: Compass, text: "Coordinator · split “clean up EMEA” into 4 tasks · routed by badge" },
+  { Icon: LockKeyhole, text: "Analyst · update_deal denied · read access to deals · 0 rows touched" },
 ];
 
 function JournalTicker() {
@@ -154,12 +173,13 @@ function JournalTicker() {
       <div className="flex w-max rc-marquee">
         {[0, 1].map((copy) => (
           <div key={copy} className="flex shrink-0" aria-hidden={copy === 1}>
-            {JOURNAL.map((entry) => (
+            {JOURNAL.map(({ Icon, text }) => (
               <span
-                key={entry}
-                className="mx-3 whitespace-nowrap font-mono text-[11px] text-slate-600"
+                key={text}
+                className="mx-3 inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] text-slate-600"
               >
-                {entry}
+                <Icon aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
+                {text}
               </span>
             ))}
           </div>
@@ -359,13 +379,16 @@ function GlassBox() {
         <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/30">
           <div className="grid divide-y divide-slate-800 md:grid-cols-3 md:divide-x md:divide-y-0">
             {[
-              { k: "who", v: "🤝 Sales Assistant", d: "acting as you, labelled as itself" },
-              { k: "why", v: "you said: “they want a proposal by Friday”", d: "message #1184 · 4:31pm" },
-              { k: "what", v: "deal #7 · stage qualified → proposal", d: "run r_8c21 · step 2 of 4" },
+              { k: "who", v: "Sales Assistant", d: "acting as you, labelled as itself", Icon: BriefcaseBusiness },
+              { k: "why", v: "you said: “they want a proposal by Friday”", d: "message #1184 · 4:31pm", Icon: null },
+              { k: "what", v: "deal #7 · stage qualified → proposal", d: "run r_8c21 · step 2 of 4", Icon: null },
             ].map((cell) => (
               <div key={cell.k} className="p-5">
                 <div className="font-mono text-[10px] uppercase tracking-wider text-slate-600">{cell.k}</div>
-                <div className="mt-1.5 text-sm text-slate-200">{cell.v}</div>
+                <div className="mt-1.5 flex items-center gap-1.5 text-sm text-slate-200">
+                  {cell.Icon ? <cell.Icon aria-hidden="true" className="h-4 w-4 text-slate-400" /> : null}
+                  {cell.v}
+                </div>
                 <div className="mt-1 text-[11px] text-slate-500">{cell.d}</div>
               </div>
             ))}
@@ -374,8 +397,8 @@ function GlassBox() {
             <span className="text-sm text-slate-400">
               Nothing an agent does is ever more than one click from undone.
             </span>
-            <span className="ml-auto rounded-lg border border-slate-700 px-3 py-1 text-[11px] font-medium text-slate-300">
-              ↩ Undo this change
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1 text-[11px] font-medium text-slate-300">
+              <Undo2 aria-hidden="true" className="h-3.5 w-3.5" /> Undo this change
             </span>
           </div>
         </div>
@@ -397,24 +420,24 @@ function Proactive() {
       <div className="grid gap-4 md:grid-cols-3">
         {[
           {
-            icon: "🕘",
+            Icon: Clock3,
             head: "Routines",
             body: "The Monday brief, the Friday hygiene sweep, month-end forecast prep — on a schedule, not on an ask.",
           },
           {
-            icon: "🐕",
+            Icon: Dog,
             head: "Watchdogs",
             body: "Deal stalled 14 days. Champion gone quiet. Renewal window opening. Two agents about to write conflicting facts.",
           },
           {
-            icon: "⚡",
+            Icon: Zap,
             head: "Triggers",
             body: "Inbound lead → enrich → dedupe → route → draft intro → park in Approvals. No human pushing each domino.",
           },
         ].map((card, i) => (
           <Reveal key={card.head} delay={i * 100} className="h-full">
             <div className="h-full rounded-2xl border border-slate-800 bg-slate-900/30 p-6 transition hover:border-slate-700">
-              <div className="text-2xl">{card.icon}</div>
+              <card.Icon aria-hidden="true" className="h-6 w-6 text-indigo-300" strokeWidth={1.7} />
               <h3 className="mt-3 text-sm font-semibold text-slate-200">{card.head}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{card.body}</p>
             </div>
@@ -541,7 +564,7 @@ function Roadmap() {
                 {phase.items.map((item) => (
                   <li key={item} className="flex gap-2">
                     <span className={phase.done ? "text-emerald-400" : "text-slate-600"}>
-                      {phase.done ? "✓" : "○"}
+                      {phase.done ? <Check aria-hidden="true" className="mt-0.5 h-3.5 w-3.5" /> : <Circle aria-hidden="true" className="mt-0.5 h-3.5 w-3.5" />}
                     </span>
                     <span>{item}</span>
                   </li>
@@ -599,7 +622,7 @@ function Principles() {
               ].map(([head, body]) => (
                 <li key={head}>
                   <div className="flex gap-2 text-sm font-medium text-slate-200">
-                    <span className="text-rose-400/80">✗</span>
+                    <X aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-rose-400/80" />
                     {head}
                   </div>
                   <p className="mt-1 pl-6 text-xs leading-relaxed text-slate-500">{body}</p>

@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Play, Plus } from "lucide-react";
 import { Agent, Routine, RoutineRun, RoutineSchedule, WorkspaceSettings } from "@/lib/types";
 import { api, fmtTime } from "@/lib/client";
+import { AgentIcon } from "@/app/components/AgentIcon";
 
 const WEEKDAYS = [
   [1, "M"], [2, "T"], [3, "W"], [4, "T"], [5, "F"], [6, "S"], [7, "S"],
@@ -160,7 +162,7 @@ export default function RoutinesTab({
   return (
     <div className="space-y-2">
       <button onClick={showForm ? () => setShowForm(false) : openNew} className="w-full rounded-lg border border-dashed border-slate-700 py-1.5 text-xs text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300">
-        {showForm ? "Cancel" : "+ Add routine"}
+        {showForm ? "Cancel" : <span className="inline-flex items-center gap-1"><Plus aria-hidden="true" className="h-3 w-3" />Add routine</span>}
       </button>
 
       {showForm && (
@@ -169,7 +171,7 @@ export default function RoutinesTab({
           <textarea placeholder="What should the agent do? *" rows={3} value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none" />
           <select value={form.agentId} onChange={(event) => setForm({ ...form, agentId: event.target.value })} className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none">
             <option value="">Choose an agent</option>
-            {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.emoji} {agent.name}</option>)}
+            {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
           </select>
           <div className="flex gap-2">
             <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as RoutineSchedule["kind"] })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none">
@@ -196,13 +198,13 @@ export default function RoutinesTab({
         return (
           <div key={routine.id} className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0"><div className="truncate text-[13px] font-medium text-slate-200">{routine.name}</div><div className="mt-0.5 text-[11px] text-slate-500">{routine.agent_emoji} {routine.agent_name ?? "Agent removed"}</div></div>
+              <div className="min-w-0"><div className="truncate text-[13px] font-medium text-slate-200">{routine.name}</div><div className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-slate-500"><AgentIcon icon={routine.agent_emoji} name={routine.agent_name} className="h-3 w-3" />{routine.agent_name ?? "Agent removed"}</div></div>
               <span className={`rounded-full border px-2 py-0.5 text-[10px] ${routine.enabled ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : "border-slate-700 text-slate-500"}`}>{routine.enabled ? "active" : "paused"}</span>
             </div>
             <div className="mt-2 text-[11px] text-slate-500">{scheduleLabel(routine.schedule, settings.timezone)}</div>
             <div className="mt-1 text-[10px] text-slate-600">{routine.next_run_at ? `Next: ${fmtTime(routine.next_run_at)}` : "No upcoming run"}</div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <button onClick={() => run(routine.id)} disabled={isRunning || agentBusy || routine.agent_id == null} className="rounded-md border border-indigo-500/50 bg-indigo-500/10 px-2 py-1 text-[10px] text-indigo-300 enabled:hover:bg-indigo-500/25 disabled:opacity-40">{isRunning ? "Running…" : "▶ Run now"}</button>
+              <button onClick={() => run(routine.id)} disabled={isRunning || agentBusy || routine.agent_id == null} className="rounded-md border border-indigo-500/50 bg-indigo-500/10 px-2 py-1 text-[10px] text-indigo-300 enabled:hover:bg-indigo-500/25 disabled:opacity-40"><span className="inline-flex items-center gap-1"><Play aria-hidden="true" className="h-3 w-3" />{isRunning ? "Running…" : "Run now"}</span></button>
               <button onClick={() => updateEnabled(routine)} disabled={routine.agent_id == null} className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400 hover:text-slate-200 disabled:opacity-40">{routine.enabled ? "Pause" : "Resume"}</button>
               <button onClick={() => openEdit(routine)} className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400 hover:text-slate-200">Edit</button>
               <button onClick={() => archive(routine)} className="rounded-md border border-slate-800 px-2 py-1 text-[10px] text-slate-600 hover:text-rose-300">Archive</button>
