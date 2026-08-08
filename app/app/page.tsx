@@ -174,7 +174,7 @@ export default function Workspace() {
                 loadThreads().catch(() => {});
                 break;
               case "routed":
-                note(`→ routed to ${event.agentEmoji} ${event.agentName}`);
+                note(`→ routed to ${event.agentName}`);
                 break;
               case "handoff":
                 note(`${event.fromName} handed off to ${event.toName}`);
