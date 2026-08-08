@@ -471,7 +471,7 @@ export default function Workspace() {
           workspaceMode={workspaceMode}
           onOpenWorkflowStudio={openWorkflowStudio}
         />
-        <main className={`crm-canvas flex min-w-0 flex-col border-l border-slate-800/70 bg-slate-950 ${workspaceMode === "workflows" ? "w-[400px] shrink-0 border-r 2xl:w-[440px]" : "flex-1 border-r"}`}>
+        <main className={`crm-canvas flex min-w-0 flex-col border-l border-slate-800/90 bg-slate-950 ${workspaceMode === "workflows" ? "w-[400px] shrink-0 border-r 2xl:w-[440px]" : "flex-1 border-r"}`}>
           <Chat
             key={activeThread.id}
             thread={activeThread}

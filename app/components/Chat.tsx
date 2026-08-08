@@ -160,21 +160,27 @@ export default function Chat({
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800/70 px-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{workflowContext ? "✦" : thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}</span>
-            <h1 className="truncate text-sm font-semibold text-slate-200">{workflowContext ? "Build with chat" : thread.title}</h1>
+      <header className="crm-chat-header flex h-16 shrink-0 items-center justify-between border-b border-slate-800/70 px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm text-slate-400 ring-1 ring-slate-800/80">
+            {workflowContext ? "✦" : thread.account_name ? "🏢" : thread.id === 1 ? "⌂" : "💬"}
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold leading-5 tracking-tight text-slate-100">
+              {workflowContext ? "Build with chat" : thread.title}
+            </h1>
+            <p className="mt-0.5 truncate text-xs leading-4 text-slate-400">
+              {workflowContext
+                ? workflowContext.name
+                  ? `Editing “${workflowContext.name}” · every change becomes a version.`
+                  : "Describe a workflow, then refine every step here."
+                : thread.account_name
+                  ? `Account thread · agents use ${thread.account_name} as the default context.`
+                  : thread.id === 1
+                    ? "Workspace-wide conversation for cross-account work and daily updates."
+                    : "A focused conversation; its title is created from your first message."}
+            </p>
           </div>
-          <p className="text-[11px] text-slate-500">
-            {workflowContext
-              ? workflowContext.name ? `Editing “${workflowContext.name}” · every change becomes a version.` : "Describe a workflow, then refine every step here."
-              : thread.account_name
-              ? `Account thread · agents use ${thread.account_name} as the default context.`
-              : thread.id === 1
-                ? "Workspace-wide conversation for cross-account work and daily updates."
-                : "A focused conversation; its title is created from your first message."}
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {proposals.length > 0 && (
@@ -191,142 +197,149 @@ export default function Chat({
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
-        {messages.length === 0 && runs.length === 0 && (
-          <div className="mx-auto mt-16 max-w-sm rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center">
-            <div className="text-2xl">💬</div>
-            <div className="mt-2 text-sm font-medium text-slate-300">
-              {workflowContext ? "Build your first workflow" : thread.account_name ? `Start the ${thread.account_name} conversation` : "Start the conversation"}
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              {workflowContext ? (
-                <>Try: &ldquo;When a new lead is created, qualify it and create a follow-up task.&rdquo;</>
-              ) : thread.account_name ? (
-                <>Try: &ldquo;Summarize this account and tell me the next best action.&rdquo;</>
-              ) : (
-                <>
-                  Try: &ldquo;Add a contact — Jane Doe at Globex, jane@globex.com&rdquo; or
-                  &ldquo;@Data&nbsp;Analyst what&rsquo;s stuck?&rdquo;
-                </>
-              )}
-            </p>
-          </div>
-        )}
-
-        {messages.map((m) => (
-          <MessageBubble
-            key={m.id}
-            message={m}
-            agents={agents}
-            proposals={proposals.filter((p) => p.message_id === m.id)}
-            onUndo={() => onUndo(m.id)}
-            onFocusRecord={onFocusRecord}
-            onDecideProposal={onDecideProposal}
-          />
-        ))}
-
-        {notices.map((n) => (
-          <div key={n.id} className="text-center text-[11px] text-slate-500">
-            {n.text}
-          </div>
-        ))}
-
-        {runs.map((run) => (
-          <LiveBubble key={`${run.runKey}:${run.agentId}`} run={run} onStop={() => onStop(run.runKey, run.agentId)} />
-        ))}
-      </div>
-
-      <div className="shrink-0 border-t border-slate-800/70 p-4">
-        {agents.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[11px] text-slate-500">To:</span>
-            <button
-              onClick={() => onSelectRecipient("auto")}
-              title="Let RunCRM pick the right agent for each message"
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
-                recipient === "auto"
-                  ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200"
-                  : "border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
-              }`}
-            >
-              ✨ Auto
-            </button>
-            {agents.map((a) => {
-              const busy = runs.some((r) => r.agentId === a.id);
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => onSelectRecipient(a.id)}
-                  className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
-                    a.id === recipient
-                      ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200"
-                      : "border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
-                  }`}
-                >
-                  <span>{a.emoji}</span>
-                  {a.name}
-                  {busy && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="relative">
-          {suggestions.length > 0 && (
-            <div className="absolute bottom-full left-0 z-20 mb-1.5 w-64 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
-              {suggestions.map((a, i) => (
-                <button
-                  key={a.id}
-                  onMouseEnter={() => setHighlighted(i)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    acceptMention(a);
-                  }}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition ${
-                    i === highlighted ? "bg-indigo-500/15 text-indigo-100" : "text-slate-300 hover:bg-slate-800"
-                  }`}
-                >
-                  <span className="text-sm">{a.emoji}</span>
-                  <span className="flex-1 truncate font-medium">{a.name}</span>
-                  <span className="text-[10px] text-slate-500">{a.model.replace("claude-", "")}</span>
-                </button>
-              ))}
-              <div className="border-t border-slate-800 px-3 py-1 text-[10px] text-slate-600">
-                ↑↓ to choose · Enter to insert
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="mx-auto w-full max-w-[960px] space-y-5">
+          {messages.length === 0 && runs.length === 0 && (
+            <div className="mx-auto mt-16 max-w-sm rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center">
+              <div className="text-2xl">💬</div>
+              <div className="mt-2 text-sm font-medium text-slate-300">
+                {workflowContext ? "Build your first workflow" : thread.account_name ? `Start the ${thread.account_name} conversation` : "Start the conversation"}
               </div>
+              <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                {workflowContext ? (
+                  <>Try: &ldquo;When a new lead is created, qualify it and create a follow-up task.&rdquo;</>
+                ) : thread.account_name ? (
+                  <>Try: &ldquo;Summarize this account and tell me the next best action.&rdquo;</>
+                ) : (
+                  <>
+                    Try: &ldquo;Add a contact — Jane Doe at Globex, jane@globex.com&rdquo; or
+                    &ldquo;@Data&nbsp;Analyst what&rsquo;s stuck?&rdquo;
+                  </>
+                )}
+              </p>
             </div>
           )}
 
-          <div className="flex items-end gap-2 rounded-xl border border-slate-700 bg-slate-900/70 p-2 focus-within:border-indigo-500/60">
-            <textarea
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                syncMentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
-              }}
-              onKeyUp={(e) => syncMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
-              onBlur={() => setMentionQuery(null)}
-              onKeyDown={onKeyDown}
-              rows={Math.min(5, Math.max(1, draft.split("\n").length))}
-              placeholder={placeholder}
-              className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none"
-              disabled={agents.length === 0}
+          {messages.map((m) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              agents={agents}
+              proposals={proposals.filter((p) => p.message_id === m.id)}
+              onUndo={() => onUndo(m.id)}
+              onFocusRecord={onFocusRecord}
+              onDecideProposal={onDecideProposal}
             />
-            <button
-              onClick={() => void send()}
-              disabled={!draft.trim() || agents.length === 0}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Send
-            </button>
-          </div>
+          ))}
+
+          {notices.map((n) => (
+            <div key={n.id} className="text-center text-[11px] text-slate-400">
+              {n.text}
+            </div>
+          ))}
+
+          {runs.map((run) => (
+            <LiveBubble key={`${run.runKey}:${run.agentId}`} run={run} onStop={() => onStop(run.runKey, run.agentId)} />
+          ))}
         </div>
-        <div className="mt-1.5 px-1 text-[10px] text-slate-600">
-          {workflowContext
-            ? "Describe changes naturally · every saved revision appears in the preview"
-            : "Enter to send · Shift+Enter for a new line · @name to address an agent · you can keep typing while one works"}
+      </div>
+
+      <div className="crm-composer shrink-0 border-t border-slate-800/70 px-5 pb-4 pt-3">
+        <div className="mx-auto w-full max-w-[960px]">
+          {agents.length > 0 && (
+            <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                Route to
+              </span>
+              <button
+                onClick={() => onSelectRecipient("auto")}
+                title="Let RunCRM pick the right agent for each message"
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                  recipient === "auto"
+                    ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200"
+                    : "border-transparent bg-slate-900/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                }`}
+              >
+                ✨ Auto
+              </button>
+              {agents.map((a) => {
+                const busy = runs.some((r) => r.agentId === a.id);
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => onSelectRecipient(a.id)}
+                    className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                      a.id === recipient
+                        ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200"
+                        : "border-transparent bg-slate-900/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    }`}
+                  >
+                    <span>{a.emoji}</span>
+                    {a.name}
+                    {busy && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="relative">
+            {suggestions.length > 0 && (
+              <div className="absolute bottom-full left-0 z-20 mb-1.5 w-64 overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+                {suggestions.map((a, i) => (
+                  <button
+                    key={a.id}
+                    onMouseEnter={() => setHighlighted(i)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      acceptMention(a);
+                    }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition ${
+                      i === highlighted ? "bg-indigo-500/15 text-indigo-100" : "text-slate-300 hover:bg-slate-800"
+                    }`}
+                  >
+                    <span className="text-sm">{a.emoji}</span>
+                    <span className="flex-1 truncate font-medium">{a.name}</span>
+                    <span className="text-[10px] text-slate-500">{a.model.replace("claude-", "")}</span>
+                  </button>
+                ))}
+                <div className="border-t border-slate-800 px-3 py-1 text-[10px] text-slate-600">
+                  ↑↓ to choose · Enter to insert
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-end gap-2 rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_8px_24px_rgba(17,18,22,0.06)] transition focus-within:border-indigo-500/70 focus-within:ring-2 focus-within:ring-indigo-500/10">
+              <textarea
+                ref={inputRef}
+                aria-label={placeholder}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  syncMentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                }}
+                onKeyUp={(e) => syncMentionQuery(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+                onBlur={() => setMentionQuery(null)}
+                onKeyDown={onKeyDown}
+                rows={Math.min(5, Math.max(1, draft.split("\n").length))}
+                placeholder={placeholder}
+                className="max-h-40 flex-1 resize-none bg-transparent px-2.5 py-2 text-sm leading-5 text-slate-200 placeholder:text-slate-500 focus:outline-none"
+                disabled={agents.length === 0}
+              />
+              <button
+                onClick={() => void send()}
+                disabled={!draft.trim() || agents.length === 0}
+                className="min-h-10 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition enabled:hover:bg-indigo-700 enabled:hover:shadow-md disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+          <div className="mt-1.5 px-1 text-[11px] leading-4 text-slate-400">
+            {workflowContext
+              ? "Describe changes naturally · every saved revision appears in the preview"
+              : "Enter to send · Shift+Enter for a new line · @name to address an agent · you can keep typing while one works"}
+          </div>
         </div>
       </div>
     </>
@@ -335,7 +348,7 @@ export default function Chat({
 
 function AgentAvatar({ emoji }: { emoji: string }) {
   return (
-    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-sm">
+    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm shadow-sm ring-1 ring-slate-800/80">
       {emoji}
     </span>
   );
@@ -346,10 +359,10 @@ function LiveBubble({ run, onStop }: { run: LiveRun; onStop: () => void }) {
   return (
     <div className="flex items-start gap-2.5">
       <AgentAvatar emoji={run.agentEmoji} />
-      <div className="max-w-[78%] min-w-0">
+      <div className="max-w-[72%] min-w-0">
         <div className="mb-1 flex items-baseline gap-2 pl-1">
-          <span className="text-xs font-semibold text-slate-300">{run.agentName}</span>
-          <span className="text-[10px] text-slate-600">working…</span>
+          <span className="text-xs font-semibold text-slate-200">{run.agentName}</span>
+          <span className="text-[11px] text-slate-400">working…</span>
           <button
             onClick={onStop}
             className="rounded-md border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400 transition hover:border-rose-500/50 hover:text-rose-300"
@@ -366,7 +379,7 @@ function LiveBubble({ run, onStop }: { run: LiveRun; onStop: () => void }) {
           </div>
         )}
 
-        <div className="rounded-2xl rounded-tl-sm border border-slate-800 bg-slate-900/70 px-4 py-2.5 text-sm leading-relaxed text-slate-200 shadow-sm">
+        <div className="rounded-2xl rounded-tl-sm border border-slate-800/80 bg-slate-950/95 px-4 py-3 text-sm leading-relaxed text-slate-200 shadow-[0_6px_18px_rgba(17,18,22,0.05)]">
           {run.text ? (
             <span className="whitespace-pre-wrap">{run.text}</span>
           ) : (
@@ -629,11 +642,11 @@ function MessageBubble({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[78%]">
-          <div className="whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm">
+        <div className="max-w-[72%]">
+          <div className="whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-2.5 text-sm leading-relaxed text-white shadow-[0_5px_14px_rgba(89,64,180,0.18)]">
             {withMentions(message.content, agents)}
           </div>
-          <div className="mt-1 pr-1 text-right text-[10px] text-slate-600">{fmtTime(message.created_at)}</div>
+          <div className="mt-1 pr-1 text-right text-[11px] text-slate-400">{fmtTime(message.created_at)}</div>
         </div>
       </div>
     );
@@ -645,18 +658,18 @@ function MessageBubble({
   return (
     <div className="flex items-start gap-2.5">
       <AgentAvatar emoji={message.agent_emoji ?? "🤖"} />
-      <div className="max-w-[78%] min-w-0">
+      <div className="max-w-[72%] min-w-0">
         <div className="mb-1 flex items-baseline gap-2 pl-1">
-          <span className="text-xs font-semibold text-slate-300">{message.agent_name ?? "Agent"}</span>
-          <span className="text-[10px] text-slate-600">{fmtTime(message.created_at)}</span>
+          <span className="text-xs font-semibold text-slate-200">{message.agent_name ?? "Agent"}</span>
+          <span className="text-[11px] text-slate-400">{fmtTime(message.created_at)}</span>
         </div>
         <div
-          className={`whitespace-pre-wrap rounded-2xl rounded-tl-sm border px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
+          className={`whitespace-pre-wrap rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed shadow-[0_6px_18px_rgba(17,18,22,0.05)] ${
             message.is_error
               ? "border-rose-500/40 bg-rose-950/40 text-rose-200"
               : isHandoff
                 ? "border-dashed border-violet-500/40 bg-violet-950/20 text-violet-200"
-                : "border-slate-800 bg-slate-900/70 text-slate-200"
+                : "border-slate-800/80 bg-slate-950/95 text-slate-200"
           }`}
         >
           {message.content}

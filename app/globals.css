@@ -93,7 +93,7 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid rgba(107, 80, 203, 0.55);
+  outline: 2px solid #5940b4;
   outline-offset: 2px;
 }
 
@@ -145,7 +145,7 @@ details > summary::-webkit-details-marker {
 }
 
 .crm-sidebar {
-  background: linear-gradient(180deg, #fafafa 0%, #f5f6f7 100%);
+  background: linear-gradient(180deg, #f8f8fa 0%, #f2f3f6 100%);
 }
 
 .crm-mark {
@@ -155,19 +155,27 @@ details > summary::-webkit-details-marker {
 }
 
 .crm-canvas {
-  background-color: #fbfbfc;
-  background-image: radial-gradient(circle, rgba(156, 160, 170, 0.24) 0.8px, transparent 0.9px);
-  background-size: 18px 18px;
+  background-color: #fdfdfe;
+  background-image: radial-gradient(circle, rgba(126, 132, 144, 0.14) 0.75px, transparent 0.85px);
+  background-size: 20px 20px;
 }
 
 .crm-canvas > header,
 .crm-canvas > div:last-child {
-  background: rgba(251, 251, 252, 0.94);
+  background: rgba(253, 253, 254, 0.94);
   backdrop-filter: blur(18px);
 }
 
+.crm-chat-header {
+  box-shadow: 0 1px 0 rgba(17, 18, 22, 0.025);
+}
+
+.crm-composer {
+  box-shadow: 0 -10px 30px rgba(17, 18, 22, 0.035);
+}
+
 .crm-data-panel {
-  background: linear-gradient(180deg, #fafafa 0%, #f7f7f8 100%);
+  background: linear-gradient(180deg, #f8f8fa 0%, #f4f5f7 100%);
 }
 
 .crm-workspace input,
@@ -206,6 +214,13 @@ details > summary::-webkit-details-marker {
 
   .crm-sidebar {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-workspace .animate-bounce,
+  .crm-workspace .animate-pulse {
+    animation: none !important;
   }
 }
 

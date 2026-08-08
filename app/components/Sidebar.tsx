@@ -94,7 +94,7 @@ function SectionAction({
     <button
       type="button"
       aria-busy={disabled || undefined}
-      className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-transparent bg-slate-900 px-2.5 text-[11px] font-semibold text-slate-300 transition-colors hover:border-indigo-500/20 hover:bg-indigo-950 hover:text-indigo-300 disabled:cursor-wait disabled:opacity-50"
+      className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-transparent bg-transparent px-1.5 text-[11px] font-semibold text-slate-400 transition-colors hover:bg-slate-900 hover:text-indigo-300 disabled:cursor-wait disabled:opacity-50"
       disabled={disabled}
       onClick={onClick}
       title={title}
@@ -145,7 +145,7 @@ export default function Sidebar({
   };
 
   return (
-    <aside aria-label="Workspace sidebar" className="crm-sidebar flex w-[17rem] shrink-0 flex-col bg-slate-950">
+    <aside aria-label="Workspace sidebar" className="crm-sidebar flex w-[16rem] shrink-0 flex-col bg-slate-950">
       <div className="flex shrink-0 items-center gap-3 px-4 pb-4 pt-5">
         <div className="crm-mark flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold text-white shadow-lg shadow-indigo-950">
           R
@@ -153,7 +153,7 @@ export default function Sidebar({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-[15px] font-semibold tracking-tight text-slate-100">RunCRM</span>
-            <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">v0.1</span>
+            <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">v0.1</span>
           </div>
           <div className="mt-0.5 text-[11px] text-slate-400">Chat-first CRM</div>
         </div>
@@ -164,10 +164,10 @@ export default function Sidebar({
           type="button"
           aria-pressed={workspaceMode === "workflows"}
           onClick={onOpenWorkflowStudio}
-          className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors ${
+          className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-left transition-colors ${
             workspaceMode === "workflows"
-              ? "border-indigo-500/25 bg-indigo-500/[0.08]"
-              : "border-slate-800 bg-white/55 hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]"
+              ? "border-indigo-500/25 bg-indigo-500/[0.08] shadow-sm"
+              : "border-transparent bg-transparent hover:border-slate-800 hover:bg-white/55"
           }`}
         >
           {workspaceMode === "workflows" && (
@@ -187,7 +187,7 @@ export default function Sidebar({
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4">
         <section aria-labelledby="sidebar-conversations-heading">
           <div className="flex items-center justify-between gap-3 px-1 pb-2 pt-2">
-            <h2 id="sidebar-conversations-heading" className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+            <h2 id="sidebar-conversations-heading" className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
               Conversations
             </h2>
             <SectionAction
@@ -215,7 +215,7 @@ export default function Sidebar({
                   title={`${thread.title} — ${preview}`}
                   className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left transition-colors ${
                     selected
-                      ? "border-indigo-500/20 bg-indigo-500/[0.08]"
+                      ? "border-indigo-500/20 bg-indigo-500/[0.08] shadow-sm"
                       : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
                   }`}
                 >
@@ -228,9 +228,9 @@ export default function Sidebar({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline gap-2">
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-200">{thread.title}</span>
+                        <span className={`min-w-0 flex-1 truncate text-[13px] text-slate-200 ${selected ? "font-semibold" : "font-medium"}`}>{thread.title}</span>
                         {thread.last_message_at && (
-                          <span className="shrink-0 text-[10px] tabular-nums text-slate-400">{fmtTime(thread.last_message_at)}</span>
+                          <span className="shrink-0 text-[11px] tabular-nums text-slate-400">{fmtTime(thread.last_message_at)}</span>
                         )}
                       </span>
                       <span className="mt-0.5 block truncate text-[11px] leading-4 text-slate-400">{preview}</span>
@@ -246,7 +246,7 @@ export default function Sidebar({
 
         <section aria-labelledby="sidebar-agents-heading">
           <div className="flex items-center justify-between gap-3 px-1 pb-2">
-            <h2 id="sidebar-agents-heading" className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+            <h2 id="sidebar-agents-heading" className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
               Agents
             </h2>
             <SectionAction onClick={onNewAgent} title="Create a new agent">
@@ -276,19 +276,16 @@ export default function Sidebar({
                     onClick={() => onSelect(agent.id)}
                     className={`relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl border py-2.5 pl-3 pr-10 text-left transition-colors ${
                       selected
-                        ? "border-indigo-500/20 bg-indigo-500/[0.08]"
+                        ? "border-transparent bg-slate-900/85"
                         : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
                     }`}
                   >
-                    {selected && (
-                      <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-indigo-500" />
-                    )}
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${selected ? "bg-indigo-500/10" : "bg-slate-800/80"}`}>
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base ${selected ? "bg-indigo-950 text-indigo-300 ring-1 ring-indigo-500/20" : "bg-slate-800/80"}`}>
                       {agent.emoji}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
-                        <span className="truncate text-[13px] font-medium text-slate-200">{agent.name}</span>
+                        <span className={`truncate text-[13px] font-medium ${selected ? "text-indigo-300" : "text-slate-200"}`}>{agent.name}</span>
                         {busy && (
                           <span className="inline-flex shrink-0 items-center" title="Working">
                             <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
@@ -298,7 +295,7 @@ export default function Sidebar({
                       </span>
                       <span className="mt-1 flex min-w-0 items-center gap-1.5">
                         {agent.kind === "workflow" && (
-                          <span className="shrink-0 rounded-full bg-indigo-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-indigo-400">
+                          <span className="shrink-0 rounded-full bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-400">
                             Builder
                           </span>
                         )}
@@ -312,7 +309,7 @@ export default function Sidebar({
                             />
                           ))}
                         </span>
-                        <span className="min-w-0 truncate text-[10px] text-slate-400">{agent.model.replace("claude-", "")}</span>
+                        <span className="min-w-0 truncate text-[11px] text-slate-400">{agent.model.replace("claude-", "")}</span>
                       </span>
                     </span>
                   </button>

@@ -134,7 +134,7 @@ const ACTIVITY_ICON: Record<string, string> = { note: "📝", call: "📞", emai
 
 function Pill({ text, map }: { text: string; map: Record<string, string> }) {
   return (
-    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${map[text] ?? map.lead}`}>
+    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] font-medium leading-none capitalize ${map[text] ?? map.lead}`}>
       {text}
     </span>
   );
@@ -239,11 +239,11 @@ export default function DataPanel({
         : null;
 
   return (
-    <aside className="crm-data-panel hidden w-[400px] shrink-0 flex-col overflow-x-hidden bg-slate-950 lg:flex">
+    <aside className="crm-data-panel hidden w-[360px] shrink-0 flex-col overflow-x-hidden bg-slate-950 2xl:w-[368px] lg:flex">
       <div
         role="tablist"
         aria-label="CRM data sections"
-        className="flex h-14 shrink-0 items-stretch gap-6 border-b border-slate-800/70 px-4"
+        className="flex h-16 shrink-0 items-stretch gap-7 border-b border-slate-800/70 px-5"
       >
         {SECTIONS.map((item, index) => (
           <button
@@ -263,10 +263,10 @@ export default function DataPanel({
                 selectSection
               )
             }
-            className={`-mb-px border-b-2 px-0.5 pt-0.5 text-xs font-medium transition ${
+            className={`-mb-px border-b-2 px-0.5 pt-0.5 text-sm font-semibold transition ${
               section === item.id
                 ? "border-indigo-500 text-slate-100"
-                : "border-transparent text-slate-500 hover:border-slate-700 hover:text-slate-300"
+                : "border-transparent text-slate-400 hover:border-slate-700 hover:text-slate-200"
             }`}
           >
             {item.label}
@@ -279,13 +279,13 @@ export default function DataPanel({
         id={`crm-section-panel-${section}`}
         role="tabpanel"
         aria-labelledby={`crm-section-tab-${section}`}
-        className="flex-1 overflow-y-auto p-3"
+        className="flex-1 overflow-y-auto px-4 pb-4 pt-3"
       >
         {secondaryTabs && (
           <div
             role="tablist"
             aria-label={`${section === "records" ? "Record" : "Work"} views`}
-            className="mb-3 flex rounded-xl bg-slate-900/75 p-1"
+            className="mb-3 flex rounded-xl bg-slate-900/70 p-1"
           >
             {secondaryTabs.map((item, index) => {
               const selected = tab === item.id;
@@ -307,10 +307,10 @@ export default function DataPanel({
                       selectTab
                     )
                   }
-                  className={`flex min-w-0 flex-1 items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-medium transition ${
+                  className={`flex min-w-0 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-medium transition ${
                     selected
-                      ? "bg-slate-800 text-slate-100 shadow-sm"
-                      : "text-slate-500 hover:text-slate-300"
+                      ? "bg-slate-950 text-slate-100 shadow-sm ring-1 ring-slate-800/80"
+                      : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
                   {item.label}
@@ -318,10 +318,10 @@ export default function DataPanel({
                     <span
                       className={`ml-1.5 tabular-nums ${
                         item.attention
-                          ? "rounded-full bg-indigo-950 px-1.5 py-0.5 text-[9px] leading-none text-indigo-300"
+                          ? "rounded-full bg-indigo-950 px-1.5 py-0.5 text-[10px] leading-none text-indigo-300"
                           : selected
                             ? "text-indigo-300"
-                            : "text-slate-600"
+                            : "text-slate-400"
                       }`}
                     >
                       {item.count}
@@ -434,19 +434,24 @@ function ContactsTab({
   };
 
   return (
-    <div className="space-y-2.5">
-      <button
-        type="button"
-        onClick={() => setShowForm((s) => !s)}
-        aria-expanded={showForm}
-        aria-controls="add-contact-form"
-        className="flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-700 bg-slate-950/45 px-3 py-2 text-xs font-medium text-slate-400 transition hover:border-indigo-500/50 hover:bg-indigo-950/45 hover:text-indigo-300"
-      >
-        <span aria-hidden="true" className="text-base leading-none">
-          {showForm ? "×" : "+"}
-        </span>
-        {showForm ? "Cancel" : "Add contact"}
-      </button>
+    <div>
+      <div className="mb-2 flex min-h-8 items-center justify-between gap-3 px-1">
+        <p className="text-xs text-slate-400">
+          {contacts.length} {contacts.length === 1 ? "person" : "people"}
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowForm((s) => !s)}
+          aria-expanded={showForm}
+          aria-controls="add-contact-form"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/75 px-2.5 text-xs font-semibold text-slate-300 shadow-sm transition hover:border-indigo-500/35 hover:bg-indigo-950/55 hover:text-indigo-300"
+        >
+          <span aria-hidden="true" className="text-sm leading-none">
+            {showForm ? "×" : "+"}
+          </span>
+          {showForm ? "Close" : "New contact"}
+        </button>
+      </div>
       {showForm && (
         <form
           id="add-contact-form"
@@ -454,10 +459,10 @@ function ContactsTab({
             event.preventDefault();
             void create();
           }}
-          className="space-y-2.5 rounded-xl border border-slate-800 bg-slate-950/80 p-3 shadow-sm"
+          className="mb-2.5 space-y-2.5 rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-sm"
         >
           <label className="block space-y-1">
-            <span className="text-[10px] font-medium text-slate-400">Name</span>
+            <span className="text-[11px] font-medium text-slate-400">Name</span>
             <input
               required
               autoComplete="name"
@@ -469,7 +474,7 @@ function ContactsTab({
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="min-w-0 space-y-1">
-              <span className="text-[10px] font-medium text-slate-400">Email</span>
+              <span className="text-[11px] font-medium text-slate-400">Email</span>
               <input
                 type="email"
                 autoComplete="email"
@@ -480,7 +485,7 @@ function ContactsTab({
               />
             </label>
             <label className="min-w-0 space-y-1">
-              <span className="text-[10px] font-medium text-slate-400">Company</span>
+              <span className="text-[11px] font-medium text-slate-400">Company</span>
               <input
                 autoComplete="organization"
                 placeholder="Acme"
@@ -492,7 +497,7 @@ function ContactsTab({
           </div>
           <div className="flex items-end gap-2">
             <label className="min-w-0 flex-1 space-y-1">
-              <span className="text-[10px] font-medium text-slate-400">Status</span>
+              <span className="text-[11px] font-medium text-slate-400">Status</span>
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
@@ -508,71 +513,73 @@ function ContactsTab({
             <button
               type="submit"
               disabled={!form.name.trim()}
-              className="min-h-9 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white transition enabled:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="min-h-9 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white transition enabled:hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Add contact
             </button>
           </div>
         </form>
       )}
-      {contacts.map((c) => (
-        <article
-          key={c.id}
-          data-record={`contacts-${c.id}`}
-          aria-labelledby={`contact-${c.id}-name`}
-          className={`rounded-xl border border-slate-800 bg-slate-950/85 p-3 shadow-[0_1px_2px_rgba(17,18,22,0.04)] transition-shadow${focusClass(focusedId, "contacts", c.id)}`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
-                <h3
-                  id={`contact-${c.id}-name`}
-                  title={c.name}
-                  className="min-w-0 truncate text-sm font-semibold leading-5 text-slate-200"
+      <div className="divide-y divide-slate-800/85">
+        {contacts.map((c) => (
+          <article
+            key={c.id}
+            data-record={`contacts-${c.id}`}
+            aria-labelledby={`contact-${c.id}-name`}
+            className={`group -mx-1 rounded-xl px-3 py-3.5 transition-colors hover:bg-slate-950/65${focusClass(focusedId, "contacts", c.id)}`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3
+                    id={`contact-${c.id}-name`}
+                    title={c.name}
+                    className="min-w-0 truncate text-sm font-semibold leading-5 text-slate-100"
+                  >
+                    {c.name}
+                  </h3>
+                  <Pill text={c.status} map={STATUS_PILL} />
+                </div>
+                <div
+                  title={[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
+                  className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-400"
                 >
-                  {c.name}
-                </h3>
-                <Pill text={c.status} map={STATUS_PILL} />
-              </div>
-              <div
-                title={[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
-                className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-400"
-              >
-                {[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
+                  {[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
+                </div>
               </div>
             </div>
-          </div>
-          {c.notes && (
-            <p
-              title={c.notes}
-              className="mt-2.5 line-clamp-2 rounded-lg bg-slate-900/70 px-2.5 py-2 text-[11px] leading-4 text-slate-400"
-            >
-              {c.notes}
-            </p>
-          )}
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-800/80 pt-2.5">
-            <div className="min-w-0">
-              <div className="text-[10px] font-medium text-slate-400">Sales rep</div>
-              <div
-                title={c.sales_rep_name ?? "Unassigned"}
-                className="mt-0.5 truncate text-[11px] font-medium text-slate-300"
+            {c.notes && (
+              <p
+                title={c.notes}
+                className="mt-2.5 line-clamp-2 border-l-2 border-slate-800 pl-2.5 text-xs leading-4 text-slate-400"
               >
-                {c.sales_rep_name ?? "Unassigned"}
+                {c.notes}
+              </p>
+            )}
+            <div className="mt-2.5 flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-medium text-slate-400">Sales rep</div>
+                <div
+                  title={c.sales_rep_name ?? "Unassigned"}
+                  className="mt-0.5 truncate text-xs font-semibold text-slate-300"
+                >
+                  {c.sales_rep_name ?? "Unassigned"}
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => void openAccountThread(c)}
+                disabled={openingContactId !== null}
+                title={`Open ${c.company ?? c.name} conversation`}
+                aria-label={`Open ${c.company ?? c.name} conversation`}
+                className="min-h-8 shrink-0 rounded-lg border border-transparent bg-transparent px-2.5 text-xs font-semibold text-indigo-300 transition hover:border-indigo-800 hover:bg-indigo-950/80 hover:text-indigo-200 disabled:cursor-wait disabled:opacity-60"
+              >
+                {openingContactId === c.id ? "Opening…" : "Message"}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void openAccountThread(c)}
-              disabled={openingContactId !== null}
-              title={`Open ${c.company ?? c.name} conversation`}
-              aria-label={`Open ${c.company ?? c.name} conversation`}
-              className="min-h-9 shrink-0 rounded-lg border border-indigo-800 bg-indigo-950/75 px-3 text-[11px] font-semibold text-indigo-300 transition hover:border-indigo-500/45 hover:bg-indigo-900/75 hover:text-indigo-200 disabled:cursor-wait disabled:opacity-60"
-            >
-              {openingContactId === c.id ? "Opening…" : "Message"}
-            </button>
-          </div>
-        </article>
-      ))}
+          </article>
+        ))}
+      </div>
     </div>
   );
 }
