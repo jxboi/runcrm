@@ -8,14 +8,14 @@ import {
   releaseRoutineLock,
   setRoutineRunTriggerMessage,
 } from "./routines";
-import { ChatThread } from "./types";
+import { ChatThreadContext } from "./types";
 
 const discardEvents: EmitFn = () => {};
 
 /** Execute a claimed routine run through the same chain used by chat and tasks. */
 export async function executeRoutineRun(
   runId: number,
-  options: { emit?: EmitFn; signal?: AbortSignal; thread?: ChatThread } = {}
+  options: { emit?: EmitFn; signal?: AbortSignal; thread?: ChatThreadContext } = {}
 ) {
   const run = await getRoutineRun(runId);
   if (!run || run.status !== "running") throw new Error("Routine run is not available");

@@ -1,16 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { AccessLevel, Agent, Autonomy, Capabilities, ENTITIES } from "@/lib/types";
+import { AccessLevel, Agent, CAPABILITY_ENTITIES, Capabilities } from "@/lib/types";
 import { AGENT_ICON_OPTIONS, AgentIcon, agentIconKey } from "@/app/components/AgentIcon";
+import DropdownMenu from "@/app/components/DropdownMenu";
 
 const MODELS: { id: string; label: string }[] = [
-  { id: "claude-opus-5", label: "Claude Opus 5 — most capable (default)" },
-  { id: "claude-sonnet-5", label: "Claude Sonnet 5 — fast & capable" },
+  { id: "claude-opus-5", label: "Claude Opus 5 — most capable" },
+  { id: "claude-sonnet-5", label: "Claude Sonnet 5 — fast & capable (default)" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 — fastest" },
 ];
 
-const LEVELS: AccessLevel[] = ["none", "read", "write"];
+const ICON_OPTIONS = [
+  ...AGENT_ICON_OPTIONS.map(({ key, label }) => ({ key, label })),
+  { key: "workflow", label: "Workflow" },
+  { key: "compass", label: "Coordinator" },
+  { key: "trash", label: "Cleanup" },
+  { key: "clock", label: "Renewals" },
+  { key: "user", label: "Person" },
+];
+
+const LEVELS = [
+  { value: "none", label: "None" },
+  { value: "read", label: "Read" },
+  { value: "write_ask", label: "Write" },
+  { value: "write_full", label: "Full" },
+] as const satisfies readonly { value: AccessLevel; label: string }[];
+const ACCESS_LABELS = { contacts: "Contacts", deals: "Deals", activities: "Activities", tasks: "Tasks", sales_reps: "Sales reps", workflows: "Workflow" } as const;
 
 export default function AgentModal({
   agent,
@@ -25,12 +41,17 @@ export default function AgentModal({
 }) {
   const [name, setName] = useState(agent?.name ?? "");
   const [iconKey, setIconKey] = useState(() => agentIconKey(agent?.emoji, agent?.name));
-  const [model, setModel] = useState(agent?.model ?? "claude-opus-5");
+  const [model, setModel] = useState(agent?.model ?? "claude-sonnet-5");
   const [instructions, setInstructions] = useState(agent?.instructions ?? "");
-  const [caps, setCaps] = useState<Capabilities>(
-    agent?.capabilities ?? { contacts: "read", deals: "read", activities: "read", tasks: "read", sales_reps: "read" }
-  );
-  const [autonomy, setAutonomy] = useState<Autonomy>(agent?.autonomy ?? "auto");
+  const [caps, setCaps] = useState<Capabilities>(() => {
+    const initial = agent?.capabilities ?? { contacts: "read", deals: "read", activities: "read", tasks: "read", sales_reps: "read", workflows: "none" };
+    return Object.fromEntries(
+      CAPABILITY_ENTITIES.map((entity) => [
+        entity,
+        initial[entity] === "write" ? (agent?.autonomy === "ask" ? "write_ask" : "write_full") : initial[entity],
+      ])
+    ) as Capabilities;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +63,7 @@ export default function AgentModal({
     setSaving(true);
     setError(null);
     try {
-      await onSave({ name, emoji: iconKey, model, instructions, capabilities: caps, autonomy }, agent?.id);
+      await onSave({ name, emoji: iconKey, model, instructions, capabilities: caps }, agent?.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save");
       setSaving(false);
@@ -52,67 +73,59 @@ export default function AgentModal({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-slate-100">{agent ? "Edit agent" : "New agent"}</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          {agent?.kind === "workflow"
-            ? "This built-in agent owns the versioned workflow authoring tools."
-            : "Instructions shape how it behaves; access rights control which CRM tools it gets."}
+          Instructions shape how it behaves; access rights control which tools it gets.
         </p>
 
         <div className="mt-5 space-y-4">
-          <div className="flex gap-3">
-            <div className="w-20">
-              <span className="text-[11px] font-medium text-slate-400">Icon</span>
-              <span className="mt-1 flex h-10 w-full items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-indigo-300">
-                <AgentIcon icon={iconKey} name={name} className="h-5 w-5" />
-              </span>
-            </div>
-            <div className="flex-1">
-              <label className="text-[11px] font-medium text-slate-400">Name</label>
+          <div>
+            <label htmlFor="agent-name" className="text-[11px] font-medium text-slate-400">Name</label>
+            <div className="relative mt-1">
               <input
+                id="agent-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Sales Assistant"
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-14 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none"
                 autoFocus
               />
+              <div className="absolute right-2 top-1/2 z-10 w-9 -translate-y-1/2">
+                <DropdownMenu
+                  options={ICON_OPTIONS.map(({ key, label }) => ({ value: key, label }))}
+                  value={iconKey}
+                  onChange={setIconKey}
+                  id="agent-icon"
+                  ariaLabel="Agent icon"
+                  className="w-full"
+                  buttonClassName="h-9 justify-center rounded-lg border-transparent bg-slate-700 p-2 text-sm text-slate-300 hover:border-transparent focus:border-transparent"
+                  menuClassName="grid w-64 grid-cols-3 gap-2 p-3"
+                  showChevron={false}
+                  renderValue={() => <AgentIcon icon={iconKey} name={name} className="h-4 w-4 text-slate-400" />}
+                  renderOption={(option, selected) => (
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${selected ? "bg-slate-700" : ""}`}>
+                      <AgentIcon icon={option.value} name={option.label} className="h-4 w-4 text-slate-400" />
+                    </span>
+                  )}
+                />
+              </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-5 gap-1.5" aria-label="Choose agent icon">
-            {AGENT_ICON_OPTIONS.map(({ key, label, Icon }) => (
-              <button
-                type="button"
-                key={key}
-                aria-label={label}
-                aria-pressed={iconKey === key}
-                title={label}
-                onClick={() => setIconKey(key)}
-                className={`flex h-9 items-center justify-center rounded-lg border transition hover:bg-slate-800 ${
-                  iconKey === key ? "border-indigo-500 bg-indigo-500/10 text-indigo-300" : "border-slate-800 text-slate-400"
-                }`}
-              >
-                <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-              </button>
-            ))}
           </div>
 
           <div>
             <label className="text-[11px] font-medium text-slate-400">Model</label>
-            <select
+            <DropdownMenu
+              options={MODELS}
               value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:border-indigo-500 focus:outline-none"
-            >
-              {MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+              onChange={setModel}
+              id="agent-model"
+              ariaLabel="Agent model"
+              className="mt-1 w-full"
+              buttonClassName="h-9 rounded-lg border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
+            />
           </div>
 
           <div>
@@ -129,28 +142,31 @@ export default function AgentModal({
           <div>
             <label className="text-[11px] font-medium text-slate-400">Access rights</label>
             <div className="mt-1.5 overflow-hidden rounded-lg border border-slate-700">
-              {ENTITIES.map((entity, idx) => (
+              {CAPABILITY_ENTITIES.map((entity, idx) => (
                 <div
                   key={entity}
                   className={`flex items-center justify-between px-3 py-2 ${idx > 0 ? "border-t border-slate-800" : ""}`}
                 >
-                  <span className="text-sm capitalize text-slate-300">{entity.replaceAll("_", " ")}</span>
-                  <div className="flex overflow-hidden rounded-md border border-slate-700">
-                    {LEVELS.map((level) => (
+                  <span className="text-sm text-slate-300">{ACCESS_LABELS[entity]}</span>
+                  <div className="flex overflow-hidden rounded-md border border-slate-700 divide-x divide-slate-700">
+                    {LEVELS.map(({ value, label }) => (
                       <button
-                        key={level}
-                        onClick={() => setCaps((c) => ({ ...c, [entity]: level }))}
-                        className={`px-2.5 py-1 text-[11px] font-medium capitalize transition ${
-                          caps[entity] === level
-                            ? level === "write"
-                              ? "bg-emerald-600/30 text-emerald-300"
-                              : level === "read"
+                        type="button"
+                        key={value}
+                        onClick={() => setCaps((c) => ({ ...c, [entity]: value }))}
+                        className={`whitespace-nowrap px-2.5 py-1 text-[11px] font-medium transition ${
+                          caps[entity] === value
+                            ? value === "write_full"
+                              ? "bg-rose-600/30 text-rose-300"
+                              : value === "write_ask"
+                                ? "bg-emerald-600/30 text-emerald-300"
+                              : value === "read"
                                 ? "bg-sky-600/30 text-sky-300"
                                 : "bg-slate-700 text-slate-300"
                             : "text-slate-500 hover:bg-slate-800"
                         }`}
                       >
-                        {level}
+                        {label}
                       </button>
                     ))}
                   </div>
@@ -158,49 +174,14 @@ export default function AgentModal({
               ))}
             </div>
             <p className="mt-1 text-[10px] text-slate-600">
-              read = list &amp; look up · write = also create, update, and log
+              Read = List &amp; Look up · Write = Approval Required · Full = Apply Immediately
             </p>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-medium text-slate-400">Writes</label>
-            <div className="mt-1.5 grid grid-cols-2 gap-2">
-              {(
-                [
-                  {
-                    value: "auto",
-                    title: "Go ahead",
-                    blurb: "Writes apply immediately, except new contacts. Still undoable.",
-                  },
-                  { value: "ask", title: "Ask me first", blurb: "Writes wait for your approval in chat." },
-                ] as { value: Autonomy; title: string; blurb: string }[]
-              ).map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setAutonomy(option.value)}
-                  className={`rounded-lg border px-3 py-2 text-left transition ${
-                    autonomy === option.value
-                      ? "border-indigo-500/60 bg-indigo-500/10"
-                      : "border-slate-700 hover:border-slate-500"
-                  }`}
-                >
-                  <div
-                    className={`text-xs font-medium ${
-                      autonomy === option.value ? "text-indigo-200" : "text-slate-300"
-                    }`}
-                  >
-                    {option.title}
-                  </div>
-                  <div className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{option.blurb}</div>
-                </button>
-              ))}
-            </div>
           </div>
 
           {error && <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-xs text-rose-300">{error}</div>}
 
           <div className="flex items-center justify-between pt-1">
-            {agent && agent.kind !== "workflow" ? (
+            {agent ? (
               <button
                 onClick={() => {
                   if (confirm(`Delete ${agent.name}? Its chat messages will remain.`)) onDelete(agent.id);

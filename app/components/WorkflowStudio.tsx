@@ -216,7 +216,7 @@ export default function WorkflowStudio({
       aria-expanded={workflowListOpen}
       onClick={() => setWorkflowListOpen((open) => !open)}
       title={`${workflowListOpen ? "Hide" : "Show"} workflows`}
-      className={`inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-[11px] font-medium shadow-sm transition-colors ${
+      className={`inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-[11px] font-medium transition-colors ${
         workflowListOpen
           ? "border-indigo-500/35 bg-indigo-500/10 text-indigo-300"
           : "border-slate-700 bg-white text-slate-400 hover:border-indigo-500/35 hover:text-indigo-300"
@@ -254,7 +254,7 @@ export default function WorkflowStudio({
                 onClick={() => void runTest()}
                 disabled={testing || errors.length > 0}
                 title={errors.length ? "Fix validation errors before testing" : "Run a dry test with sample data"}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-white px-2.5 text-[11px] font-medium text-slate-300 shadow-sm transition hover:border-indigo-500/50 hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-40 xl:px-3"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-700 bg-white px-2.5 text-[11px] font-medium text-slate-300 transition hover:border-indigo-500/50 hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-40 xl:px-3"
               >
                 <Play aria-hidden="true" className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
                 <span className="hidden xl:inline">{testing ? "Testing…" : "Test"}</span>
@@ -357,7 +357,7 @@ export default function WorkflowStudio({
           aria-label="Workflows"
           aria-hidden={!workflowListOpen}
           inert={!workflowListOpen}
-          className={`absolute inset-y-0 right-0 z-30 flex w-72 max-w-[calc(100%-1rem)] flex-col border-l border-slate-800/90 bg-slate-950/95 shadow-[-18px_0_40px_rgba(30,32,38,0.13)] backdrop-blur-xl transition duration-200 ease-out motion-reduce:transition-none ${
+          className={`absolute inset-y-0 right-0 z-30 flex w-72 max-w-[calc(100%-1rem)] flex-col border-l border-slate-800/90 bg-slate-950/95 backdrop-blur-xl transition duration-200 ease-out motion-reduce:transition-none ${
             workflowListOpen ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0"
           }`}
         >
@@ -383,7 +383,7 @@ export default function WorkflowStudio({
             <button
               type="button"
               onClick={startWorkflow}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-semibold text-white shadow-sm transition-colors hover:bg-indigo-500"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-semibold text-white transition-colors hover:bg-indigo-500"
             >
               <Plus aria-hidden="true" className="h-3.5 w-3.5" />
               New
@@ -425,7 +425,7 @@ export default function WorkflowStudio({
                   key={workflow.id}
                   aria-current={current ? "page" : undefined}
                   onClick={() => selectWorkflow(workflow.id)}
-                  className={`group relative w-full overflow-hidden rounded-xl border p-3 text-left shadow-sm transition-colors ${
+                  className={`group relative w-full overflow-hidden rounded-xl border p-3 text-left transition-colors ${
                     current
                       ? "border-indigo-500/30 bg-indigo-500/[0.08]"
                       : "border-slate-800 bg-white/65 hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]"
@@ -484,7 +484,7 @@ function EmptyWorkflowState({ architectName, onDraftPrompt }: { architectName: s
   return (
     <div className="flex flex-1 items-center justify-center overflow-y-auto p-8">
       <div className="w-full max-w-2xl text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 shadow-lg shadow-indigo-950/30"><Bot aria-hidden="true" className="h-6 w-6" strokeWidth={1.7} /></div>
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400"><Bot aria-hidden="true" className="h-6 w-6" strokeWidth={1.7} /></div>
         <h2 className="mt-5 text-xl font-semibold tracking-tight text-slate-100">Describe it. See it. Refine it.</h2>
         <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-slate-500">
           Tell {architectName} what should start the workflow, what decisions it makes, and what happens next. Every correction stays in chat and becomes a recoverable version.
@@ -503,7 +503,7 @@ function EmptyWorkflowState({ architectName, onDraftPrompt }: { architectName: s
         </div>
         <button
           onClick={() => onDraftPrompt(`@${architectName} Create a workflow that `)}
-          className="mt-6 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-indigo-500"
+          className="mt-6 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-indigo-500"
         >
           Start in chat
         </button>
@@ -577,7 +577,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
       <div ref={viewportRef} className="relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle,rgba(156,160,170,0.28)_0.8px,transparent_0.9px)] bg-[size:18px_18px]">
-        <div className="sticky left-3 top-3 z-20 flex w-fit items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/90 p-1 shadow-sm backdrop-blur">
+        <div className="sticky left-3 top-3 z-20 flex w-fit items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/90 p-1 backdrop-blur">
           <button
             type="button"
             onClick={() => {
@@ -652,7 +652,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
                   key={node.id}
                   onClick={() => setSelectedNodeId(node.id)}
                   style={{ left: point.x - 105, top: point.y, width: 210, height: 88 }}
-                  className={`absolute rounded-2xl border bg-slate-950 p-3 text-left shadow-[0_8px_24px_rgba(30,32,38,0.08)] transition hover:-translate-y-0.5 ${selected ? "border-indigo-500 ring-4 ring-indigo-500/10" : "border-slate-700 hover:border-slate-600"}`}
+                  className={`absolute rounded-2xl border bg-slate-950 p-3 text-left transition ${selected ? "border-indigo-500 ring-4 ring-indigo-500/10" : "border-slate-700 hover:border-slate-600"}`}
                 >
                   <div className="flex items-center gap-2.5">
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold ${meta.className}`}><NodeKindIcon kind={node.kind} /></span>
@@ -670,7 +670,7 @@ function WorkflowPreview({ workflow, onChangeNode }: { workflow: Workflow; onCha
       </div>
 
       {selectedNode && (
-        <aside className="absolute right-3 top-3 z-20 hidden max-h-[calc(100%-1.5rem)] w-64 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/95 p-4 shadow-[0_16px_42px_rgba(30,32,38,0.14)] backdrop-blur-xl 2xl:block">
+        <aside className="absolute right-3 top-3 z-20 hidden max-h-[calc(100%-1.5rem)] w-64 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/95 p-4 backdrop-blur-xl 2xl:block">
           <div className="flex items-start justify-between gap-2">
             <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${KIND_META[selectedNode.kind].className}`}>
               <NodeKindIcon kind={selectedNode.kind} className="h-3 w-3" /> {KIND_META[selectedNode.kind].label}

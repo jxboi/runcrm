@@ -5,10 +5,9 @@ const schemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     emoji TEXT NOT NULL DEFAULT 'bot',
-    kind TEXT NOT NULL DEFAULT 'general',
     instructions TEXT NOT NULL DEFAULT '',
     capabilities TEXT NOT NULL DEFAULT '{}',
-    model TEXT NOT NULL DEFAULT 'claude-opus-5',
+    model TEXT NOT NULL DEFAULT 'claude-sonnet-5',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS sales_reps (
@@ -67,6 +66,11 @@ const schemaStatements = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     account_name TEXT COLLATE NOCASE UNIQUE,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    last_read_message_id INTEGER,
+    memory TEXT,
+    continued_from_thread_id INTEGER REFERENCES threads(id) ON DELETE SET NULL,
+    archived_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
@@ -79,6 +83,13 @@ const schemaStatements = [
     content TEXT NOT NULL,
     trace TEXT NOT NULL DEFAULT '[]',
     is_error INTEGER NOT NULL DEFAULT 0,
+    liked INTEGER NOT NULL DEFAULT 0,
+    reaction TEXT,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    starred INTEGER NOT NULL DEFAULT 0,
+    feedback TEXT,
+    reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    forwarded_from_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   // Writes an "ask" agent wants to make, held until the user decides.
@@ -209,8 +220,19 @@ export function ensureDb(): Promise<D1Database> {
  */
 const addedColumns: { table: string; column: string; definition: string }[] = [
   { table: "agents", column: "autonomy", definition: "TEXT NOT NULL DEFAULT 'auto'" },
-  { table: "agents", column: "kind", definition: "TEXT NOT NULL DEFAULT 'general'" },
+  { table: "threads", column: "pinned", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "threads", column: "archived_at", definition: "TEXT" },
+  { table: "threads", column: "last_read_message_id", definition: "INTEGER" },
+  { table: "threads", column: "memory", definition: "TEXT" },
+  { table: "threads", column: "continued_from_thread_id", definition: "INTEGER REFERENCES threads(id) ON DELETE SET NULL" },
   { table: "messages", column: "thread_id", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "messages", column: "liked", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "messages", column: "reaction", definition: "TEXT" },
+  { table: "messages", column: "pinned", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "messages", column: "starred", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "messages", column: "feedback", definition: "TEXT" },
+  { table: "messages", column: "reply_to_id", definition: "INTEGER REFERENCES messages(id) ON DELETE SET NULL" },
+  { table: "messages", column: "forwarded_from_id", definition: "INTEGER REFERENCES messages(id) ON DELETE SET NULL" },
   { table: "contacts", column: "sales_rep_id", definition: "INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL" },
   { table: "deals", column: "closed_by_sales_rep_id", definition: "INTEGER REFERENCES sales_reps(id) ON DELETE SET NULL" },
   { table: "deals", column: "closed_at", definition: "TEXT" },
@@ -229,6 +251,7 @@ async function initializeDb(): Promise<D1Database> {
   const db = getDb();
   await db.batch(schemaStatements.map((sql) => db.prepare(sql)));
   await applyColumnMigrations(db);
+  await db.prepare("UPDATE threads SET last_read_message_id = 0 WHERE id = 1 AND last_read_message_id IS NULL").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_contacts_sales_rep_id ON contacts(sales_rep_id)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_sales_reps_name ON sales_reps(name)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_deals_closed_by_sales_rep_id ON deals(closed_by_sales_rep_id)").run();
@@ -238,31 +261,26 @@ async function initializeDb(): Promise<D1Database> {
 
   const count = await db.prepare("SELECT COUNT(*) AS n FROM agents").first<{ n: number }>();
   if (!count?.n) await seed(db);
-  await ensureWorkflowAgent(db);
+  await migrateWorkflowAccess(db);
   return db;
 }
 
-async function ensureWorkflowAgent(db: D1Database) {
-  const existing = await db
-    .prepare("SELECT id, kind FROM agents WHERE kind = 'workflow' OR name = 'Workflow Architect' ORDER BY kind = 'workflow' DESC LIMIT 1")
-    .first<{ id: number; kind: string }>();
-  if (existing) {
-    if (existing.kind !== "workflow") {
-      await db.prepare("UPDATE agents SET kind = 'workflow' WHERE id = ?").bind(existing.id).run();
-    }
-    return;
-  }
+async function migrateWorkflowAccess(db: D1Database) {
+  const info = await db.prepare("PRAGMA table_info(agents)").all<{ name: string }>();
+  if (!info.results.some((column) => column.name === "kind")) return;
 
-  await db
-    .prepare("INSERT INTO agents (name, emoji, kind, instructions, capabilities, autonomy, model) VALUES (?, ?, 'workflow', ?, ?, 'auto', ?)")
-    .bind(
-      "Workflow Architect",
-      "workflow",
-      "Turn plain-language automation ideas into clear, safe, versioned workflows. Always save requested workflow changes with your workflow tools, explain assumptions briefly, and ask the user to inspect the visual preview. Never claim a draft is active unless the activation tool succeeded.",
-      JSON.stringify({ contacts: "read", deals: "read", activities: "read", tasks: "read" }),
-      "claude-opus-5"
-    )
-    .run();
+  const rows = await db.prepare("SELECT id, kind, capabilities FROM agents").all<{ id: number; kind: string; capabilities: string }>();
+  await db.batch(rows.results.map((agent) => {
+    let capabilities: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(agent.capabilities);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) capabilities = parsed;
+    } catch {}
+    if (capabilities.workflows !== "read" && capabilities.workflows !== "write" && capabilities.workflows !== "write_ask" && capabilities.workflows !== "write_full") {
+      capabilities.workflows = agent.kind === "workflow" ? "write_full" : "none";
+    }
+    return db.prepare("UPDATE agents SET capabilities = ? WHERE id = ?").bind(JSON.stringify(capabilities), agent.id);
+  }));
 }
 
 async function seed(db: D1Database) {
@@ -271,15 +289,22 @@ async function seed(db: D1Database) {
       "Sales Assistant",
       "briefcase",
       "You are a proactive sales assistant. Keep the CRM tidy: create and update contacts and deals when asked, log activities for anything noteworthy, and always confirm exactly what you changed (names, IDs, values). Be brief and action-oriented.",
-      JSON.stringify({ contacts: "write", deals: "write", activities: "write", tasks: "read" }),
-      "claude-opus-5",
+      JSON.stringify({ contacts: "write_full", deals: "write_full", activities: "write_full", tasks: "read" }),
+      "claude-sonnet-5",
     ),
     db.prepare("INSERT INTO agents (name, emoji, instructions, capabilities, model) VALUES (?, ?, ?, ?, ?)").bind(
       "Data Analyst",
       "chart",
       "You are a read-only CRM analyst. Answer questions about the pipeline with concrete numbers: totals, counts, stage breakdowns, top deals. Never guess — look the data up with your tools first. Present findings compactly, leading with the headline number.",
       JSON.stringify({ contacts: "read", deals: "read", activities: "read", tasks: "read" }),
-      "claude-opus-5",
+      "claude-sonnet-5",
+    ),
+    db.prepare("INSERT INTO agents (name, emoji, instructions, capabilities, model) VALUES (?, ?, ?, ?, ?)").bind(
+      "Workflow Architect",
+      "workflow",
+      "Turn plain-language automation ideas into clear, safe, versioned workflows. Always save requested workflow changes with your workflow tools, explain assumptions briefly, and ask the user to inspect the visual preview. Never claim a draft is active unless the activation tool succeeded.",
+      JSON.stringify({ contacts: "read", deals: "read", activities: "read", tasks: "read", sales_reps: "none", workflows: "write_full" }),
+      "claude-sonnet-5",
     ),
   ]);
 

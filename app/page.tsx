@@ -281,8 +281,8 @@ function Roster() {
 
 const SNIPPET = `function allowed(agent: Agent, spec: ToolSpec): boolean {
   const level = agent.capabilities[spec.entity];
-  if (spec.level === "read") return level === "read" || level === "write";
-  return level === "write";
+  if (spec.level === "read") return level !== "none";
+  return level === "write_ask" || level === "write_full";
 }
 
 /** Tool definitions this agent is allowed to use. */

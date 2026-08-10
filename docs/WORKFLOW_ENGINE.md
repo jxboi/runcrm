@@ -4,7 +4,7 @@ RunCRM workflows are authored in chat, stored as immutable graph versions, rende
 
 ## Product contract
 
-1. A user describes a workflow to the built-in Workflow Architect.
+1. A user describes a workflow to an agent with Workflow write access.
 2. The agent saves a complete, validated v1 graph with `create_workflow`.
 3. The studio selects that saved workflow and renders the database version—not an optimistic model response.
 4. A follow-up instruction makes the agent read the current graph and call `revise_workflow` with the whole replacement definition and `expected_version`.
@@ -18,7 +18,7 @@ The chat message is the command surface. The canvas, version list, validation st
 - `workflows` owns identity, lifecycle status, and the current version number.
 - `workflow_versions` stores immutable JSON definitions and human-readable change summaries.
 - `workflow_runs` stores test or future live execution traces.
-- `agents.kind = workflow` is the server-enforced capability boundary for workflow authoring tools.
+- `agents.capabilities.workflows` is the server-enforced capability boundary for workflow authoring tools.
 
 A definition is a portable JSON document with `schema_version`, metadata, nodes, and edges. Nodes use stable ids so revisions and future diff views can identify unchanged steps.
 

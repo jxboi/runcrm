@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Play, Plus } from "lucide-react";
 import { Agent, Routine, RoutineRun, RoutineSchedule, WorkspaceSettings } from "@/lib/types";
-import { api, fmtTime } from "@/lib/client";
+import { api, fmtClock, fmtTime } from "@/lib/client";
 import { AgentIcon } from "@/app/components/AgentIcon";
+import DropdownMenu from "@/app/components/DropdownMenu";
 
 const WEEKDAYS = [
   [1, "M"], [2, "T"], [3, "W"], [4, "T"], [5, "F"], [6, "S"], [7, "S"],
@@ -26,10 +27,11 @@ function blankForm(agents: Agent[], timezone: string): FormState {
 }
 
 function scheduleLabel(schedule: RoutineSchedule, timezone: string) {
-  if (schedule.kind === "daily") return `Daily at ${schedule.time} · ${timezone}`;
-  if (schedule.kind === "monthly") return `Monthly on day ${schedule.day} at ${schedule.time} · ${timezone}`;
+  const time = fmtClock(schedule.time);
+  if (schedule.kind === "daily") return `Daily at ${time} · ${timezone}`;
+  if (schedule.kind === "monthly") return `Monthly on day ${schedule.day} at ${time} · ${timezone}`;
   const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  return `${schedule.weekdays.map((day) => labels[day - 1]).join(", ")} at ${schedule.time} · ${timezone}`;
+  return `${schedule.weekdays.map((day) => labels[day - 1]).join(", ")} at ${time} · ${timezone}`;
 }
 
 export default function RoutinesTab({
@@ -169,14 +171,25 @@ export default function RoutinesTab({
         <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
           <input placeholder="Routine name *" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none" />
           <textarea placeholder="What should the agent do? *" rows={3} value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none" />
-          <select value={form.agentId} onChange={(event) => setForm({ ...form, agentId: event.target.value })} className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none">
-            <option value="">Choose an agent</option>
-            {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-          </select>
+          <DropdownMenu
+            options={[{ value: "", label: "Choose an agent" }, ...agents.map((agent) => ({ value: String(agent.id), label: agent.name }))]}
+            value={form.agentId}
+            onChange={(agentId) => setForm({ ...form, agentId })}
+            id="routine-agent"
+            ariaLabel="Routine agent"
+            className="w-full"
+            buttonClassName="h-8 rounded-md border-slate-700 bg-slate-950 px-2 text-xs text-slate-200"
+          />
           <div className="flex gap-2">
-            <select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as RoutineSchedule["kind"] })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none">
-              <option value="daily">Daily</option><option value="weekly">Selected days</option><option value="monthly">Monthly</option>
-            </select>
+            <DropdownMenu
+              options={[{ value: "daily", label: "Daily" }, { value: "weekly", label: "Selected days" }, { value: "monthly", label: "Monthly" }]}
+              value={form.kind}
+              onChange={(kind) => setForm({ ...form, kind: kind as RoutineSchedule["kind"] })}
+              id="routine-schedule-kind"
+              ariaLabel="Routine schedule"
+              className="min-w-0 flex-1"
+              buttonClassName="h-8 rounded-md border-slate-700 bg-slate-950 px-2 text-xs text-slate-200"
+            />
             <input type="time" value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none" />
           </div>
           {form.kind === "weekly" && (

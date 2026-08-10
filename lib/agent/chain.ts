@@ -1,7 +1,7 @@
 import { getAgent, insertMessage } from "../crm";
 import { linkMutationsToMessage } from "../mutations";
 import { linkProposalsToMessage, listProposalsForMessage } from "../proposals";
-import { Agent, ChatThread } from "../types";
+import { Agent, ChatThreadContext } from "../types";
 import { EmitFn } from "./events";
 import { runAgentTurn } from "./runner";
 
@@ -25,7 +25,7 @@ export async function runChain(
   queue: Agent[],
   emit: EmitFn,
   signal: AbortSignal,
-  thread: ChatThread,
+  thread: ChatThreadContext,
   context: { workflowId?: number | null } = {}
 ): Promise<ChainOutcome> {
   const answered = new Set(queue.map((a) => a.id));

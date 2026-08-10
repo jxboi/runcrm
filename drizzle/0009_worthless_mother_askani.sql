@@ -1,0 +1,1 @@
+ALTER TABLE `messages` ADD `liked` integer DEFAULT 0 NOT NULL;

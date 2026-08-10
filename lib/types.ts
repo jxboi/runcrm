@@ -1,7 +1,24 @@
-export type AccessLevel = "none" | "read" | "write";
+/** "write" is accepted for agents saved before write approval became per-entity. */
+export type AccessLevel = "none" | "read" | "write_ask" | "write_full" | "write";
+
+export function canRead(level: AccessLevel): boolean {
+  return level !== "none";
+}
+
+export function canWrite(level: AccessLevel): boolean {
+  return level === "write" || level === "write_ask" || level === "write_full";
+}
+
+export function writeRequiresApproval(level: AccessLevel): boolean {
+  return level === "write_ask";
+}
 
 export const ENTITIES = ["contacts", "deals", "activities", "tasks", "sales_reps"] as const;
 export type Entity = (typeof ENTITIES)[number];
+
+/** Access scopes shown in an agent's Access rights panel. */
+export const CAPABILITY_ENTITIES = [...ENTITIES, "workflows"] as const;
+export type CapabilityEntity = (typeof CAPABILITY_ENTITIES)[number];
 
 /** For labelling a single record — "activities" doesn't singularise by dropping an "s". */
 export const ENTITY_SINGULAR: Record<Entity, string> = {
@@ -12,23 +29,15 @@ export const ENTITY_SINGULAR: Record<Entity, string> = {
   sales_reps: "sales rep",
 };
 
-export type Capabilities = Record<Entity, AccessLevel>;
+export type Capabilities = Record<CapabilityEntity, AccessLevel>;
 
-/**
- * First rung of the autonomy ladder: "auto" writes straight through except
- * for always-gated actions such as contact creation; "ask" files each write as
- * a proposal for the user to approve.
- */
+/** Legacy agent-wide write behavior, retained while saved agents migrate to per-entity access. */
 export type Autonomy = "auto" | "ask";
-
-export type AgentKind = "general" | "workflow";
 
 export interface Agent {
   id: number;
   name: string;
   emoji: string;
-  /** Workflow agents receive the versioned workflow authoring toolset. */
-  kind: AgentKind;
   instructions: string;
   capabilities: Capabilities;
   autonomy: Autonomy;
@@ -147,6 +156,7 @@ export interface Proposal {
 
 export const CONTACT_STATUSES = ["lead", "prospect", "customer", "churned"] as const;
 export type ContactStatus = (typeof CONTACT_STATUSES)[number];
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
 
 export interface Contact {
   id: number;
@@ -273,11 +283,30 @@ export interface ChatThread {
   id: number;
   title: string;
   account_name: string | null;
+  pinned: boolean;
+  unread: boolean;
+  archived_at: string | null;
   message_count: number;
   last_message: string | null;
   last_message_at: string | null;
+  agent_names: string[];
   created_at: string;
   updated_at: string;
+}
+
+/** Server-only conversation context that is intentionally omitted from thread list DTOs. */
+export interface ChatThreadContext extends ChatThread {
+  memory: string | null;
+  continued_from_thread_id: number | null;
+}
+
+export type ThreadFilter = "all" | "active" | "archived";
+
+export interface ThreadUpdate {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  read?: boolean;
 }
 
 /** A CRM record a tool call touched, so the UI can point at it. */
@@ -331,6 +360,19 @@ export interface RunNotice {
 /** Who a composed message is addressed to when there is no @mention. */
 export type Recipient = number | "auto";
 
+export const MESSAGE_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🎉", "👏", "🔥", "✅"] as const;
+export type MessageReaction = (typeof MESSAGE_REACTIONS)[number];
+
+export const MESSAGE_FEEDBACK = ["helpful", "needs_improvement", "incorrect", "unsafe"] as const;
+export type MessageFeedback = (typeof MESSAGE_FEEDBACK)[number];
+
+export interface MessageUpdate {
+  reaction?: MessageReaction | null;
+  pinned?: boolean;
+  starred?: boolean;
+  feedback?: MessageFeedback | null;
+}
+
 export interface ChatMessage {
   id: number;
   thread_id: number;
@@ -341,6 +383,18 @@ export interface ChatMessage {
   content: string;
   trace: TraceEntry[];
   is_error: boolean;
+  liked: boolean;
+  reaction: MessageReaction | null;
+  pinned: boolean;
+  starred: boolean;
+  feedback: MessageFeedback | null;
+  reply_to_id: number | null;
+  reply_to_content?: string | null;
+  reply_to_role?: "user" | "agent" | null;
+  reply_to_agent_name?: string | null;
+  forwarded_from_id: number | null;
+  forwarded_from_role?: "user" | "agent" | null;
+  forwarded_from_agent_name?: string | null;
   /** Writes from this message that haven't been undone yet — 0 means nothing to undo. */
   undoable?: number;
   created_at: string;

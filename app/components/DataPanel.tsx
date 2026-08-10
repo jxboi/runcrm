@@ -1,7 +1,23 @@
 "use client";
 
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, FileText, Mail, Phone, Play, RefreshCw, UserRound, type LucideIcon } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronRight,
+  FileText,
+  Info,
+  LayoutList,
+  Mail,
+  PanelsTopLeft,
+  Pencil,
+  Phone,
+  Play,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  UserRound,
+  X,
+} from "lucide-react";
 import {
   Activity,
   Agent,
@@ -9,6 +25,7 @@ import {
   CONTACT_STATUSES,
   Deal,
   DEAL_STAGES,
+  EMAIL_PATTERN,
   Entity,
   EntityRef,
   SalesRep,
@@ -16,6 +33,7 @@ import {
 } from "@/lib/types";
 import { api, fmtMoney, fmtTime } from "@/lib/client";
 import { AgentIcon } from "@/app/components/AgentIcon";
+import DropdownMenu from "@/app/components/DropdownMenu";
 import RoutinesTab from "./RoutinesTab";
 
 type Tab = "contacts" | "sales_reps" | "deals" | "tasks" | "routines" | "activity";
@@ -53,6 +71,32 @@ function handleTabKeyDown<T extends string>(
   onSelect(ids[nextIndex]);
   const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]");
   buttons?.[nextIndex]?.focus();
+}
+
+type ViewMenuOption = { id: Tab; label: string; count: number; attention?: boolean };
+
+function ViewMenu({
+  options,
+  value,
+  onChange,
+  buttonId,
+}: {
+  options: ViewMenuOption[];
+  value: Tab;
+  onChange: (value: Tab) => void;
+  buttonId: string;
+}) {
+  return (
+    <DropdownMenu
+      options={options.map((item) => ({ value: item.id, label: item.label }))}
+      value={value}
+      onChange={(nextValue) => onChange(nextValue as Tab)}
+      id={buttonId}
+      ariaLabel="Choose view"
+      className="w-full min-w-[6rem] max-w-[8rem]"
+      buttonClassName="text-indigo-200"
+    />
+  );
 }
 
 /** Entity names from a trace ref map onto the panel's tabs. */
@@ -153,7 +197,7 @@ function Pill({ text, map }: { text: string; map: Record<string, string> }) {
   );
 }
 
-const RECORD_ROW_CLASS = "group -mx-1 rounded-xl px-3 transition-colors hover:bg-slate-950/65";
+const RECORD_ROW_CLASS = "group -mx-1 px-3 transition-colors hover:bg-slate-950/65";
 
 export default function DataPanel({
   agents,
@@ -162,7 +206,6 @@ export default function DataPanel({
   focusRef,
   onRunTask,
   onRunRoutine,
-  onOpenAccountThread,
   onError,
 }: {
   agents: Agent[];
@@ -171,7 +214,6 @@ export default function DataPanel({
   focusRef: EntityRef | null;
   onRunTask: (taskId: number, assigneeId: number | null) => Promise<void>;
   onRunRoutine: (routineId: number, retryRunId?: number) => Promise<void>;
-  onOpenAccountThread: (accountName: string) => Promise<void>;
   onError: (msg: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("contacts");
@@ -184,6 +226,7 @@ export default function DataPanel({
   const [activities, setActivities] = useState<Activity[]>([]);
   const [runningTaskId, setRunningTaskId] = useState<number | null>(null);
   const [routineCount, setRoutineCount] = useState(0);
+  const [contactFormOpen, setContactFormOpen] = useState(false);
 
   const selectTab = useCallback((nextTab: Tab) => {
     setTab(nextTab);
@@ -195,9 +238,15 @@ export default function DataPanel({
   const section = SECTION_FOR_TAB[tab];
 
   const selectSection = (nextSection: Section) => {
-    if (nextSection === "records") selectTab(lastRecordsTab);
-    else if (nextSection === "work") selectTab(lastWorkTab);
-    else selectTab("activity");
+    if (nextSection === "records") {
+      selectTab(lastRecordsTab);
+    } else if (nextSection === "work") {
+      setContactFormOpen(false);
+      selectTab(lastWorkTab);
+    } else {
+      setContactFormOpen(false);
+      selectTab("activity");
+    }
   };
 
   const reload = useCallback(async () => {
@@ -253,153 +302,142 @@ export default function DataPanel({
           ]
         : null;
 
+  const hasChildViews = secondaryTabs !== null;
+
   return (
     <aside aria-label="CRM data" className="crm-data-panel hidden w-[clamp(20rem,25vw,23rem)] shrink-0 flex-col overflow-x-hidden bg-slate-950 lg:flex">
-      <div
-        role="tablist"
-        aria-label="CRM data sections"
-        className="flex h-16 shrink-0 items-stretch gap-7 border-b border-slate-800/70 px-5"
-      >
-        {SECTIONS.map((item, index) => (
-          <button
-            key={item.id}
-            id={`crm-section-tab-${item.id}`}
-            type="button"
-            role="tab"
-            aria-selected={section === item.id}
-            aria-controls={`crm-section-panel-${item.id}`}
-            tabIndex={section === item.id ? 0 : -1}
-            onClick={() => selectSection(item.id)}
-            onKeyDown={(event) =>
-              handleTabKeyDown(
-                event,
-                index,
-                SECTIONS.map((candidate) => candidate.id),
-                selectSection
-              )
-            }
-            className={`-mb-px border-b-2 px-0.5 pt-0.5 text-sm font-semibold transition ${
-              section === item.id
-                ? "border-indigo-500 text-slate-100"
-                : "border-transparent text-slate-400 hover:border-slate-700 hover:text-slate-200"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="flex h-16 shrink-0 items-stretch border-b border-slate-800/70 px-3">
+        <div
+          role="tablist"
+          aria-label="CRM data sections"
+          className="flex min-w-0 flex-[2_1_0%] items-stretch gap-0"
+        >
+          {SECTIONS.map((item, index) => {
+            const selected = section === item.id;
+            return (
+              <button
+                key={item.id}
+                id={`crm-section-tab-${item.id}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={`crm-section-panel-${item.id}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => selectSection(item.id)}
+                onKeyDown={(event) =>
+                  handleTabKeyDown(
+                    event,
+                    index,
+                    SECTIONS.map((candidate) => candidate.id),
+                    selectSection
+                  )
+                }
+                className={`-mb-px flex min-w-0 flex-1 items-center justify-center whitespace-nowrap border-b-2 px-1 pt-0.5 text-[11px] font-semibold transition ${
+                  selected
+                    ? "border-indigo-500 text-slate-100"
+                    : "border-transparent text-slate-400 hover:border-slate-700 hover:text-slate-200"
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {secondaryTabs ? (
+          <div className="flex min-w-[9rem] flex-1 items-stretch">
+            <span aria-hidden="true" className="mx-1.5 my-5 h-6 w-px shrink-0 bg-slate-800/80" />
+            <div className="flex min-w-[6rem] flex-1 items-center">
+              <ViewMenu
+                options={secondaryTabs}
+                value={tab}
+                onChange={selectTab}
+                buttonId={section === "records" ? "crm-view-menu-button" : "crm-work-menu-button"}
+              />
+            </div>
+          </div>
+        ) : (
+          <div aria-hidden="true" className="flex min-w-[9rem] flex-1" />
+        )}
       </div>
 
       <div
         ref={containerRef}
         id={`crm-section-panel-${section}`}
         role="tabpanel"
-        aria-labelledby={`crm-section-tab-${section}`}
+        aria-labelledby={
+          section === "records"
+            ? "crm-view-menu-button"
+            : section === "work"
+              ? "crm-work-menu-button"
+              : `crm-section-tab-${section}`
+        }
         className="flex-1 overflow-y-auto px-4 pb-4 pt-3"
       >
-        {secondaryTabs && (
+        {(section === "activity" || hasChildViews) && (
           <div
-            role="tablist"
-            aria-label={`${section === "records" ? "Record" : "Work"} views`}
-            className="mb-3 flex rounded-xl bg-slate-900/70 p-1"
+            id={`crm-view-panel-${tab}`}
+            role={hasChildViews ? "tabpanel" : undefined}
+            aria-labelledby={
+              section === "records"
+                ? "crm-view-menu-button"
+                : section === "work"
+                  ? "crm-work-menu-button"
+                  : undefined
+            }
           >
-            {secondaryTabs.map((item, index) => {
-              const selected = tab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  id={`crm-view-tab-${item.id}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  aria-controls={`crm-view-panel-${item.id}`}
-                  tabIndex={selected ? 0 : -1}
-                  onClick={() => selectTab(item.id)}
-                  onKeyDown={(event) =>
-                    handleTabKeyDown(
-                      event,
-                      index,
-                      secondaryTabs.map((candidate) => candidate.id),
-                      selectTab
-                    )
-                  }
-                  className={`flex min-w-0 flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-medium transition ${
-                    selected
-                      ? "bg-indigo-950/80 text-indigo-200 shadow-sm ring-1 ring-indigo-800/80"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  {item.label}
-                  {item.count > 0 && (
-                    <span
-                      className={`ml-1.5 tabular-nums ${
-                        item.attention
-                          ? "rounded-full bg-indigo-950 px-1.5 py-0.5 text-[10px] leading-none text-indigo-300"
-                          : selected
-                            ? "text-indigo-300"
-                            : "text-slate-400"
-                      }`}
-                    >
-                      {item.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {tab === "contacts" && (
+              <ContactsTab
+                contacts={contacts}
+                focusedId={focusedId}
+                showForm={contactFormOpen}
+                onToggleForm={() => setContactFormOpen((open) => !open)}
+                onCreated={() => {
+                  setContactFormOpen(false);
+                  void reload();
+                }}
+                onError={onError}
+              />
+            )}
+            {tab === "sales_reps" && (
+              <SalesRepsTab salesReps={salesReps} focusedId={focusedId} onCreated={reload} onError={onError} />
+            )}
+            {tab === "deals" && (
+              <DealsTab
+                deals={deals}
+                contacts={contacts}
+                salesReps={salesReps}
+                focusedId={focusedId}
+                onCreated={reload}
+                onError={onError}
+              />
+            )}
+            {tab === "tasks" && (
+              <TasksTab
+                tasks={tasks}
+                agents={agents}
+                salesReps={salesReps}
+                busyAgentIds={busyAgentIds}
+                runningTaskId={runningTaskId}
+                focusedId={focusedId}
+                onRun={runTask}
+                onCreated={reload}
+                onError={onError}
+              />
+            )}
+            {tab === "routines" && (
+              <RoutinesTab
+                agents={agents}
+                busyAgentIds={busyAgentIds}
+                version={version}
+                onRun={onRunRoutine}
+                onCount={setRoutineCount}
+                onError={onError}
+              />
+            )}
+            {tab === "activity" && <ActivityTab activities={activities} focusedId={focusedId} />}
           </div>
         )}
-
-        <div
-          id={`crm-view-panel-${tab}`}
-          role={secondaryTabs ? "tabpanel" : undefined}
-          aria-labelledby={secondaryTabs ? `crm-view-tab-${tab}` : undefined}
-        >
-          {tab === "contacts" && (
-            <ContactsTab
-              contacts={contacts}
-              focusedId={focusedId}
-              onCreated={reload}
-              onOpenAccountThread={onOpenAccountThread}
-              onError={onError}
-            />
-          )}
-          {tab === "sales_reps" && (
-            <SalesRepsTab salesReps={salesReps} focusedId={focusedId} onCreated={reload} onError={onError} />
-          )}
-          {tab === "deals" && (
-            <DealsTab
-              deals={deals}
-              contacts={contacts}
-              salesReps={salesReps}
-              focusedId={focusedId}
-              onCreated={reload}
-              onError={onError}
-            />
-          )}
-          {tab === "tasks" && (
-            <TasksTab
-              tasks={tasks}
-              agents={agents}
-              salesReps={salesReps}
-              busyAgentIds={busyAgentIds}
-              runningTaskId={runningTaskId}
-              focusedId={focusedId}
-              onRun={runTask}
-              onCreated={reload}
-              onError={onError}
-            />
-          )}
-          {tab === "routines" && (
-            <RoutinesTab
-              agents={agents}
-              busyAgentIds={busyAgentIds}
-              version={version}
-              onRun={onRunRoutine}
-              onCount={setRoutineCount}
-              onError={onError}
-            />
-          )}
-          {tab === "activity" && <ActivityTab activities={activities} focusedId={focusedId} />}
-        </div>
       </div>
     </aside>
   );
@@ -407,22 +445,176 @@ export default function DataPanel({
 
 // ---------------- contacts ----------------
 
+type ContactFormValues = { name: string; email: string; company: string; status: string };
+
+function ContactFormModal({
+  mode,
+  form,
+  hasChanges,
+  saving,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  mode: "add" | "edit";
+  form: ContactFormValues;
+  hasChanges?: boolean;
+  saving?: boolean;
+  onChange: (form: ContactFormValues) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const isEdit = mode === "edit";
+  const titleId = `${mode}-contact-title`;
+  const emailInvalid = Boolean(form.email.trim() && !EMAIL_PATTERN.test(form.email.trim()));
+
+  return (
+    <div
+      id={`${mode}-contact-form`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      className="crm-contact-modal fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+    >
+      <button
+        type="button"
+        aria-label={`Close ${isEdit ? "edit" : "add contact"} dialog`}
+        onClick={onClose}
+        className="crm-contact-modal-backdrop absolute inset-0 cursor-default bg-slate-950/35 backdrop-blur-[2px]"
+      />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        className="relative w-full max-w-[34rem] space-y-4 rounded-[1.35rem] border border-slate-700/80 bg-slate-950 p-5 shadow-[0_24px_70px_rgba(25,27,33,0.24)] sm:p-6"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h2 id={titleId} className="text-lg font-semibold text-slate-200">
+            {isEdit ? "Edit contact" : "Add a contact"}
+          </h2>
+          <button
+            type="button"
+            aria-label={`Cancel ${isEdit ? "editing" : "adding"} contact`}
+            onClick={onClose}
+            className="-mr-1 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-slate-500 shadow-[0_3px_12px_rgba(25,27,33,0.12)] transition hover:bg-slate-900 hover:text-slate-200 hover:shadow-[0_4px_16px_rgba(25,27,33,0.16)]"
+          >
+            <X aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-slate-400">Name</span>
+          <input
+            required
+            autoFocus={!isEdit}
+            autoComplete="name"
+            placeholder="Jane Doe"
+            value={form.name}
+            onChange={(event) => onChange({ ...form, name: event.target.value })}
+            disabled={saving}
+            className="crm-contact-input h-11 w-full rounded-xl border-0 bg-slate-800 px-3 text-sm text-slate-200 transition placeholder:text-slate-500 focus:border-0 focus:outline-none disabled:opacity-60"
+          />
+        </label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="min-w-0 space-y-1.5">
+            <span className="text-xs font-medium text-slate-400">Email</span>
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="jane@company.com"
+              value={form.email}
+              onChange={(event) => onChange({ ...form, email: event.target.value })}
+              aria-invalid={emailInvalid}
+              aria-describedby={emailInvalid ? `${mode}-contact-email-error` : undefined}
+              disabled={saving}
+              className="crm-contact-input h-11 w-full rounded-xl border-0 bg-slate-800 px-3 text-sm text-slate-200 transition placeholder:text-slate-500 focus:border-0 focus:outline-none disabled:opacity-60"
+            />
+            {emailInvalid && (
+              <span id={`${mode}-contact-email-error`} className="block text-xs text-rose-500">
+                Enter a valid email address.
+              </span>
+            )}
+          </label>
+          <label className="min-w-0 space-y-1.5">
+            <span className="text-xs font-medium text-slate-400">Company</span>
+            <input
+              autoComplete="organization"
+              placeholder="Acme"
+              value={form.company}
+              onChange={(event) => onChange({ ...form, company: event.target.value })}
+              disabled={saving}
+              className="crm-contact-input h-11 w-full rounded-xl border-0 bg-slate-800 px-3 text-sm text-slate-200 transition placeholder:text-slate-500 focus:border-0 focus:outline-none disabled:opacity-60"
+            />
+          </label>
+        </div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1 space-y-1.5">
+            <span className="text-xs font-medium text-slate-400">Status</span>
+            <DropdownMenu
+              options={CONTACT_STATUSES.map((status) => ({
+                value: status,
+                label: status.charAt(0).toUpperCase() + status.slice(1),
+              }))}
+              value={form.status}
+              onChange={(status) => onChange({ ...form, status })}
+              id={`crm-${mode}-contact-status`}
+              ariaLabel="Contact status"
+              className="w-full"
+              buttonClassName="h-11 rounded-xl border-slate-600 bg-slate-950 px-3 text-sm capitalize text-slate-200"
+              portal={false}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={saving || !form.name.trim() || emailInvalid || (isEdit && !hasChanges)}
+            className="h-11 shrink-0 rounded-xl bg-indigo-500 px-5 text-sm font-semibold text-white transition enabled:hover:bg-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 sm:min-w-36"
+          >
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Add contact"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function ContactsTab({
   contacts,
   focusedId,
+  showForm,
+  onToggleForm,
   onCreated,
-  onOpenAccountThread,
   onError,
 }: {
   contacts: Contact[];
   focusedId: string | null;
+  showForm: boolean;
+  onToggleForm: () => void;
   onCreated: () => void;
-  onOpenAccountThread: (accountName: string) => Promise<void>;
   onError: (m: string) => void;
 }) {
-  const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", company: "", status: "lead" });
-  const [openingContactId, setOpeningContactId] = useState<number | null>(null);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editingForm, setEditingForm] = useState({ name: "", email: "", company: "", status: "lead" });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"list" | "detailed">("detailed");
+
+  const editHasChanges = editingContact !== null && (
+    editingForm.name.trim() !== editingContact.name.trim() ||
+    editingForm.email.trim() !== (editingContact.email ?? "").trim() ||
+    editingForm.company.trim() !== (editingContact.company ?? "").trim() ||
+    editingForm.status !== editingContact.status
+  );
+
+  const visibleContacts = contacts.filter((contact) => {
+    const matchesQuery = [contact.name, contact.email, contact.company, contact.sales_rep_name, contact.notes]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(query.trim().toLocaleLowerCase());
+    return matchesQuery && (statusFilter === "all" || contact.status === statusFilter);
+  });
 
   const create = async () => {
     try {
@@ -431,167 +623,221 @@ function ContactsTab({
         body: JSON.stringify(form),
       });
       setForm({ name: "", email: "", company: "", status: "lead" });
-      setShowForm(false);
       onCreated();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Failed to create contact");
     }
   };
 
-  const openAccountThread = async (contact: Contact) => {
-    if (openingContactId !== null) return;
-    setOpeningContactId(contact.id);
+  const openEdit = (contact: Contact) => {
+    setEditingContact(contact);
+    setEditingForm({
+      name: contact.name,
+      email: contact.email ?? "",
+      company: contact.company ?? "",
+      status: contact.status,
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingContact || !editingForm.name.trim()) return;
+    setSavingEdit(true);
     try {
-      await onOpenAccountThread(contact.company ?? contact.name);
+      await api(`/api/contacts/${editingContact.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editingForm.name.trim(),
+          email: editingForm.email.trim() || null,
+          company: editingForm.company.trim() || null,
+          status: editingForm.status,
+        }),
+      });
+      setEditingContact(null);
+      onCreated();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Failed to update contact");
     } finally {
-      setOpeningContactId(null);
+      setSavingEdit(false);
     }
   };
 
+  const editButton = (contact: Contact) => {
+    return (
+      <button
+        type="button"
+        onClick={() => openEdit(contact)}
+        title={`Edit ${contact.name}`}
+        aria-label={`Edit ${contact.name}`}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent bg-transparent text-slate-500 opacity-0 transition-all hover:text-slate-200 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+      >
+        <Pencil aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
+      </button>
+    );
+  };
+
   return (
-    <div>
-      <div className="mb-2 flex min-h-8 items-center justify-end px-1">
-        <button
-          type="button"
-          onClick={() => setShowForm((s) => !s)}
-          aria-expanded={showForm}
-          aria-controls="add-contact-form"
-          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/75 px-2.5 text-xs font-semibold text-slate-300 shadow-sm transition hover:border-indigo-500/35 hover:bg-indigo-950/55 hover:text-indigo-300"
-        >
-          <span aria-hidden="true" className="text-sm leading-none">
-            {showForm ? "×" : "+"}
-          </span>
-          {showForm ? "Close" : "New contact"}
-        </button>
-      </div>
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={onToggleForm}
+        aria-expanded={showForm}
+        aria-controls="add-contact-form"
+        className="w-full rounded-lg border border-dashed border-slate-700 py-2 text-xs text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
+      >
+        + Add a contact
+      </button>
       {showForm && (
-        <form
-          id="add-contact-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void create();
-          }}
-          className="mb-2.5 space-y-2.5 rounded-xl border border-slate-800 bg-slate-950/90 p-3 shadow-sm"
-        >
-          <label className="block space-y-1">
-            <span className="text-[11px] font-medium text-slate-400">Name</span>
-            <input
-              required
-              autoComplete="name"
-              placeholder="Jane Doe"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="min-w-0 space-y-1">
-              <span className="text-[11px] font-medium text-slate-400">Email</span>
-              <input
-                type="email"
-                autoComplete="email"
-                placeholder="jane@company.com"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
-              />
-            </label>
-            <label className="min-w-0 space-y-1">
-              <span className="text-[11px] font-medium text-slate-400">Company</span>
-              <input
-                autoComplete="organization"
-                placeholder="Acme"
-                value={form.company}
-                onChange={(e) => setForm({ ...form, company: e.target.value })}
-                className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500 focus:outline-none"
-              />
-            </label>
-          </div>
-          <div className="flex items-end gap-2">
-            <label className="min-w-0 flex-1 space-y-1">
-              <span className="text-[11px] font-medium text-slate-400">Status</span>
-              <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
-                className="w-full rounded-lg border border-slate-500 bg-slate-950 px-2.5 py-2 text-xs capitalize text-slate-200 transition focus:border-indigo-500 focus:outline-none"
-              >
-                {CONTACT_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              disabled={!form.name.trim()}
-              className="min-h-9 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white transition enabled:hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Add contact
-            </button>
-          </div>
-        </form>
+        <ContactFormModal
+          mode="add"
+          form={form}
+          onChange={setForm}
+          onClose={onToggleForm}
+          onSubmit={() => void create()}
+        />
       )}
+      {editingContact && (
+        <ContactFormModal
+          mode="edit"
+          form={editingForm}
+          hasChanges={editHasChanges}
+          saving={savingEdit}
+          onChange={setEditingForm}
+          onClose={() => setEditingContact(null)}
+          onSubmit={() => void saveEdit()}
+        />
+      )}
+      <div className="mb-2.5 flex items-center gap-2">
+        <label className="relative min-w-0 flex-1">
+          <span className="sr-only">Search contacts</span>
+          <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={1.8} />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search contacts"
+            className="crm-contacts-search h-9 w-full rounded-lg border border-slate-700 bg-transparent pl-8 pr-2.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+          />
+        </label>
+        <DropdownMenu
+          options={[
+            { value: "all", label: "All" },
+            ...CONTACT_STATUSES.map((status) => ({
+              value: status,
+              label: status.charAt(0).toUpperCase() + status.slice(1),
+            })),
+          ]}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          id="crm-contact-status-filter"
+          ariaLabel="Filter contacts by status"
+          className="w-24 shrink-0"
+          buttonClassName="text-slate-300"
+          leadingIcon={SlidersHorizontal}
+        />
+        <div role="group" aria-label="Contact view" className="flex h-9 shrink-0 items-center rounded-lg border border-slate-700 p-0.5">
+          <button
+            type="button"
+            aria-pressed={viewMode === "list"}
+            onClick={() => setViewMode("list")}
+            title="List view"
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
+              viewMode === "list" ? "bg-indigo-950 text-indigo-300" : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <LayoutList aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
+            <span className="sr-only">List view</span>
+          </button>
+          <button
+            type="button"
+            aria-pressed={viewMode === "detailed"}
+            onClick={() => setViewMode("detailed")}
+            title="Detailed view"
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
+              viewMode === "detailed" ? "bg-indigo-950 text-indigo-300" : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <PanelsTopLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
+            <span className="sr-only">Detailed view</span>
+          </button>
+        </div>
+      </div>
       <div className="divide-y divide-slate-800/85">
-        {contacts.map((c) => (
+        {visibleContacts.map((c) => (
           <article
             key={c.id}
             data-record={`contacts-${c.id}`}
             aria-labelledby={`contact-${c.id}-name`}
-            className={`${RECORD_ROW_CLASS} py-3.5${focusClass(focusedId, "contacts", c.id)}`}
+            className={`${RECORD_ROW_CLASS} ${viewMode === "detailed" ? "py-3.5" : "py-2.5"}${focusClass(focusedId, "contacts", c.id)}`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-2">
-                  <h3
-                    id={`contact-${c.id}-name`}
-                    title={c.name}
-                    className="min-w-0 truncate text-sm font-semibold leading-5 text-slate-100"
-                  >
-                    {c.name}
-                  </h3>
-                  <Pill text={c.status} map={STATUS_PILL} />
-                </div>
-                <div
-                  title={[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
-                  className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-400"
+            {viewMode === "list" ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <h3
+                  id={`contact-${c.id}-name`}
+                  title={c.name}
+                  className="min-w-0 max-w-[45%] truncate text-sm font-semibold leading-5 text-slate-100"
                 >
-                  {[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
-                </div>
+                  {c.name}
+                </h3>
+                <Pill text={c.status} map={STATUS_PILL} />
+                <span
+                  title={c.company || "No company"}
+                  className="min-w-0 flex-1 truncate text-xs text-slate-400"
+                >
+                  {c.company || "No company"}
+                </span>
+                {editButton(c)}
               </div>
-            </div>
-            {c.notes && (
-              <p
-                title={c.notes}
-                className="mt-2.5 line-clamp-2 border-l-2 border-slate-800 pl-2.5 text-xs leading-4 text-slate-400"
-              >
-                {c.notes}
-              </p>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h3
+                        id={`contact-${c.id}-name`}
+                        title={c.name}
+                        className="min-w-0 truncate text-sm font-semibold leading-5 text-slate-100"
+                      >
+                        {c.name}
+                      </h3>
+                      <Pill text={c.status} map={STATUS_PILL} />
+                      {c.notes && (
+                        <span
+                          title={c.notes}
+                          aria-label={`Contact note: ${c.notes}`}
+                          tabIndex={0}
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-900 hover:text-indigo-300 focus-visible:bg-slate-900 focus-visible:text-indigo-300"
+                        >
+                          <Info aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      title={[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
+                      className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-400"
+                    >
+                      {[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
+                    </div>
+                    {c.sales_rep_name && (
+                      <div className="mt-2.5 min-w-0">
+                        <div className="text-[11px] font-medium text-slate-400">Sales rep</div>
+                        <div title={c.sales_rep_name} className="mt-0.5 truncate text-xs font-semibold text-slate-300">
+                          {c.sales_rep_name}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {editButton(c)}
+                </div>
+              </>
             )}
-            <div className="mt-2.5 flex items-end justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[11px] font-medium text-slate-400">Sales rep</div>
-                <div
-                  title={c.sales_rep_name ?? "Unassigned"}
-                  className="mt-0.5 truncate text-xs font-semibold text-slate-300"
-                >
-                  {c.sales_rep_name ?? "Unassigned"}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void openAccountThread(c)}
-                disabled={openingContactId !== null}
-                title={`Open ${c.company ?? c.name} conversation`}
-                aria-label={`Open ${c.company ?? c.name} conversation`}
-                className="min-h-8 shrink-0 rounded-lg border border-transparent bg-transparent px-2.5 text-xs font-semibold text-slate-400 transition group-hover:text-indigo-300 hover:border-indigo-800 hover:bg-indigo-950/80 hover:text-indigo-200 focus-visible:text-indigo-300 disabled:cursor-wait disabled:opacity-60"
-              >
-                {openingContactId === c.id ? "Opening…" : "Message"}
-              </button>
-            </div>
           </article>
         ))}
       </div>
+      {visibleContacts.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700 px-3 py-6 text-center text-xs text-slate-400">
+          No contacts match your search.
+        </div>
+      )}
     </div>
   );
 }
@@ -792,31 +1038,24 @@ function DealsTab({
               onChange={(e) => setForm({ ...form, value: e.target.value })}
               className="w-24 rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
             />
-            <select
-              aria-label="Deal contact"
+            <DropdownMenu
+              options={[{ value: "", label: "No contact" }, ...contacts.map((contact) => ({ value: String(contact.id), label: contact.name }))]}
               value={form.contact_id}
-              onChange={(e) => setForm({ ...form, contact_id: e.target.value })}
-              className="flex-1 rounded-md border border-slate-500 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
-            >
-              <option value="">No contact</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Deal stage"
+              onChange={(contact_id) => setForm({ ...form, contact_id })}
+              id="crm-deal-contact"
+              ariaLabel="Deal contact"
+              className="min-w-0 flex-1"
+              buttonClassName="h-8 rounded-md border-slate-500 bg-slate-950 px-2 text-xs text-slate-200"
+            />
+            <DropdownMenu
+              options={DEAL_STAGES.map((stage) => ({ value: stage, label: stage }))}
               value={form.stage}
-              onChange={(e) => setForm({ ...form, stage: e.target.value })}
-              className="w-24 rounded-md border border-slate-500 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
-            >
-              {DEAL_STAGES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              onChange={(stage) => setForm({ ...form, stage })}
+              id="crm-deal-stage"
+              ariaLabel="Deal stage"
+              className="w-24 shrink-0"
+              buttonClassName="h-8 rounded-md border-slate-500 bg-slate-950 px-2 text-xs capitalize text-slate-200"
+            />
           </div>
           <button
             onClick={create}
@@ -852,17 +1091,15 @@ function DealsTab({
               </div>
             ) : (
               <div className="mt-2 flex gap-2">
-                <select
-                  value={closers[d.id] ?? contacts.find((contact) => contact.id === d.contact_id)?.sales_rep_id ?? ""}
-                  onChange={(event) => setClosers((current) => ({ ...current, [d.id]: event.target.value }))}
-                  aria-label={`Sales rep closing ${d.title}`}
-                  className="min-w-0 flex-1 rounded-md border border-slate-500 bg-slate-950 px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
-                >
-                  <option value="">Choose closer</option>
-                  {salesReps.map((salesRep) => (
-                    <option key={salesRep.id} value={salesRep.id}>{salesRepLabel(salesRep)}</option>
-                  ))}
-                </select>
+                <DropdownMenu
+                  options={[{ value: "", label: "Choose closer" }, ...salesReps.map((salesRep) => ({ value: String(salesRep.id), label: salesRepLabel(salesRep) }))]}
+                  value={String(closers[d.id] ?? contacts.find((contact) => contact.id === d.contact_id)?.sales_rep_id ?? "")}
+                  onChange={(salesRepId) => setClosers((current) => ({ ...current, [d.id]: salesRepId }))}
+                  id={`crm-deal-closer-${d.id}`}
+                  ariaLabel={`Sales rep closing ${d.title}`}
+                  className="min-w-0 flex-1"
+                  buttonClassName="h-7 rounded-md border-slate-500 bg-slate-950 px-2 text-[11px] text-slate-300"
+                />
                 <button
                   type="button"
                   onClick={() => void closeDeal(d)}
@@ -881,6 +1118,105 @@ function DealsTab({
 }
 
 // ---------------- tasks ----------------
+
+type TaskFormValues = { title: string; description: string; assignee: string };
+
+function TaskFormModal({
+  form,
+  assigneeOptions,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  form: TaskFormValues;
+  assigneeOptions: { value: string; label: string }[];
+  onChange: (form: TaskFormValues) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      id="assign-task-form"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="assign-task-title"
+      className="crm-contact-modal fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+    >
+      <button
+        type="button"
+        aria-label="Close assign task dialog"
+        onClick={onClose}
+        className="crm-contact-modal-backdrop absolute inset-0 cursor-default bg-slate-950/35 backdrop-blur-[2px]"
+      />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        className="relative w-full max-w-[34rem] space-y-4 rounded-[1.35rem] border border-slate-700/80 bg-slate-950 p-5 shadow-[0_24px_70px_rgba(25,27,33,0.24)] sm:p-6"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h2 id="assign-task-title" className="text-lg font-semibold text-slate-200">Assign a task</h2>
+          <button
+            type="button"
+            aria-label="Cancel assigning task"
+            onClick={onClose}
+            className="-mr-1 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-slate-500 shadow-[0_3px_12px_rgba(25,27,33,0.12)] transition hover:bg-slate-900 hover:text-slate-200 hover:shadow-[0_4px_16px_rgba(25,27,33,0.16)]"
+          >
+            <X aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-slate-400">Task title</span>
+          <input
+            required
+            autoFocus
+            placeholder="Follow up with the lead"
+            value={form.title}
+            onChange={(event) => onChange({ ...form, title: event.target.value })}
+            className="crm-contact-input h-11 w-full rounded-xl border-0 bg-slate-800 px-3 text-sm text-slate-200 transition placeholder:text-slate-500 focus:border-0 focus:outline-none"
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-slate-400">Details</span>
+          <textarea
+            aria-label="Task details"
+            placeholder="Details for the assignee (optional)"
+            value={form.description}
+            onChange={(event) => onChange({ ...form, description: event.target.value })}
+            rows={4}
+            className="crm-contact-input w-full resize-none rounded-xl border-0 bg-slate-800 px-3 py-2.5 text-sm text-slate-200 transition placeholder:text-slate-500 focus:border-0 focus:outline-none"
+          />
+        </label>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1 space-y-1.5">
+            <span className="text-xs font-medium text-slate-400">Assignee</span>
+            <DropdownMenu
+              options={[
+                { value: "", label: "Unassigned" },
+                ...assigneeOptions,
+              ]}
+              value={form.assignee}
+              onChange={(assignee) => onChange({ ...form, assignee })}
+              id="crm-task-assignee"
+              ariaLabel="Task assignee"
+              className="w-full"
+              buttonClassName="h-11 rounded-xl border-slate-600 bg-slate-950 px-3 text-sm text-slate-200"
+              portal={false}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!form.title.trim()}
+            className="h-11 shrink-0 rounded-xl bg-indigo-500 px-5 text-sm font-semibold text-white transition enabled:hover:bg-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 sm:min-w-36"
+          >
+            Assign task
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 function TasksTab({
   tasks,
@@ -925,63 +1261,30 @@ function TasksTab({
     }
   };
 
+  const assigneeOptions = [
+    ...agents.map((agent) => ({ value: `agent:${agent.id}`, label: `AI · ${agent.name}` })),
+    ...salesReps.map((salesRep) => ({ value: `rep:${salesRep.id}`, label: `Rep · ${salesRepLabel(salesRep)}` })),
+  ];
+
   return (
     <div className="space-y-2">
       <button
-        onClick={() => setShowForm((s) => !s)}
+        type="button"
+        onClick={() => setShowForm(true)}
+        aria-expanded={showForm}
+        aria-controls="assign-task-form"
         className="w-full rounded-lg border border-dashed border-slate-700 py-1.5 text-xs text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
       >
-        {showForm ? "Cancel" : "+ Assign a task"}
+        + Assign a task
       </button>
       {showForm && (
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-          <input
-            aria-label="Task title"
-            placeholder="Task title *"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="w-full rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
-          />
-          <textarea
-            aria-label="Task details"
-            placeholder="Details for the agent (optional)"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={2}
-            className="w-full resize-none rounded-md border border-slate-500 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
-          />
-          <div className="flex gap-2">
-            <select
-              aria-label="Task assignee"
-              value={form.assignee}
-              onChange={(e) => setForm({ ...form, assignee: e.target.value })}
-              className="flex-1 rounded-md border border-slate-500 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
-            >
-              <option value="">Unassigned</option>
-              <optgroup label="AI agents">
-                {agents.map((a) => (
-                  <option key={a.id} value={`agent:${a.id}`}>
-                    {a.name}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Sales reps">
-                {salesReps.map((salesRep) => (
-                  <option key={salesRep.id} value={`rep:${salesRep.id}`}>
-                    {salesRepLabel(salesRep)}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-            <button
-              onClick={create}
-              disabled={!form.title.trim()}
-              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-indigo-700 disabled:opacity-40"
-            >
-              Create
-            </button>
-          </div>
-        </div>
+        <TaskFormModal
+          form={form}
+          assigneeOptions={assigneeOptions}
+          onChange={setForm}
+          onClose={() => setShowForm(false)}
+          onSubmit={() => void create()}
+        />
       )}
 
       <div className="divide-y divide-slate-800/85">

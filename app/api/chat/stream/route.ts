@@ -21,7 +21,7 @@ export const maxDuration = 300;
  * persisted here, because the client saves the partial it already has.
  */
 export async function POST(req: NextRequest) {
-  let body: { content?: string; agentId?: number | "auto" | null; threadId?: number; context?: { workflowId?: number | null } };
+  let body: { content?: string; agentId?: number | "auto" | null; threadId?: number; replyToId?: number | null; context?: { workflowId?: number | null } };
   try {
     body = await req.json();
   } catch {
@@ -47,7 +47,12 @@ export async function POST(req: NextRequest) {
   }
 
   return sseResponse(req, async (emit, signal) => {
-    const userMessage = await insertMessage({ role: "user", thread_id: threadId, content });
+    const userMessage = await insertMessage({
+      role: "user",
+      thread_id: threadId,
+      content,
+      reply_to_id: body.replyToId == null ? null : Number(body.replyToId),
+    });
     emit({ type: "user_message", message: userMessage });
 
     let queue: Agent[];
@@ -56,7 +61,10 @@ export async function POST(req: NextRequest) {
     } else if (selected) {
       queue = [selected];
     } else {
-      const picked = await routeToAgent(content, agents);
+      const routingContent = thread.memory
+        ? `Continuation memory:\n${thread.memory}\n\nNew message:\n${content}`
+        : content;
+      const picked = await routeToAgent(routingContent, agents);
       emit({ type: "routed", agentId: picked.id, agentName: picked.name, agentEmoji: picked.emoji });
       queue = [picked];
     }

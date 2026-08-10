@@ -16,6 +16,7 @@ export type RunEvent =
       type: "tool_end";
       agentId: number;
       index: number;
+      tool: string;
       ok: boolean;
       ms: number;
       isWrite: boolean;

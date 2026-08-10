@@ -37,30 +37,33 @@ vi.mock("../mutations", () => ({
   snapshotRow: mocks.snapshotRow,
 }));
 
-import { executeTool } from "./tools";
+import { executeTool, toolsForAgent } from "./tools";
 
-const autoAgent: Agent = {
+const fullWriteAgent: Agent = {
   id: 7,
   name: "Sales",
   emoji: "briefcase",
-  kind: "general",
   instructions: "",
-  capabilities: { contacts: "write", deals: "none", activities: "none", tasks: "none", sales_reps: "none" },
+  capabilities: { contacts: "write_full", deals: "none", activities: "none", tasks: "none", sales_reps: "none", workflows: "none" },
   autonomy: "auto",
   model: "test-model",
   created_at: "2026-08-04 00:00:00",
 };
 
-describe("create_contact approval", () => {
+describe("per-entity write approval", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("queues a proposal for an autonomous agent without creating the contact", async () => {
+  it("queues a proposal when contact access is Write (Ask)", async () => {
     mocks.createProposal.mockResolvedValue(41);
     const input = { name: "Jane Doe", email: "jane@example.com", company: "Globex" };
+    const askAgent: Agent = {
+      ...fullWriteAgent,
+      capabilities: { ...fullWriteAgent.capabilities, contacts: "write_ask" },
+    };
 
-    const outcome = await executeTool(autoAgent, "create_contact", input);
+    const outcome = await executeTool(askAgent, "create_contact", input);
 
     expect(mocks.createProposal).toHaveBeenCalledWith({ agentId: 7, tool: "create_contact", input });
     expect(mocks.createContact).not.toHaveBeenCalled();
@@ -68,7 +71,7 @@ describe("create_contact approval", () => {
     expect(outcome.proposalIds).toEqual([41]);
   });
 
-  it("creates the contact only when called from the approval path", async () => {
+  it("applies the change immediately when contact access is Write (Full)", async () => {
     const contact = {
       id: 12,
       name: "Jane Doe",
@@ -86,10 +89,9 @@ describe("create_contact approval", () => {
     mocks.journalMutation.mockResolvedValue(99);
 
     const outcome = await executeTool(
-      autoAgent,
+      fullWriteAgent,
       "create_contact",
-      { name: "Jane Doe", email: "jane@example.com", company: "Globex" },
-      { skipApproval: true }
+      { name: "Jane Doe", email: "jane@example.com", company: "Globex" }
     );
 
     expect(mocks.createProposal).not.toHaveBeenCalled();
@@ -97,5 +99,16 @@ describe("create_contact approval", () => {
     expect(outcome.ok).toBe(true);
     expect(outcome.refs).toEqual([{ entity: "contacts", id: 12, label: "Jane Doe" }]);
     expect(outcome.mutationIds).toEqual([99]);
+  });
+});
+
+describe("workflow access", () => {
+  it("only exposes workflow tools when the agent has Workflow access", () => {
+    expect(toolsForAgent(fullWriteAgent).some((tool) => tool.name === "list_workflows")).toBe(false);
+
+    const reader = { ...fullWriteAgent, capabilities: { ...fullWriteAgent.capabilities, workflows: "read" as const } };
+    const names = toolsForAgent(reader).map((tool) => tool.name);
+    expect(names).toContain("list_workflows");
+    expect(names).not.toContain("create_workflow");
   });
 });

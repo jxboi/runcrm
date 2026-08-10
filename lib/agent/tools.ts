@@ -17,7 +17,7 @@ import {
   updateSalesRep,
   updateTask,
 } from "../crm";
-import { ACTIVITY_TYPES, Agent, CONTACT_STATUSES, DEAL_STAGES, Entity, EntityRef, TASK_STATUSES } from "../types";
+import { ACTIVITY_TYPES, Agent, canRead, canWrite, CapabilityEntity, CONTACT_STATUSES, DEAL_STAGES, Entity, EntityRef, TASK_STATUSES, writeRequiresApproval } from "../types";
 import { journalMutation, refFor, snapshotRow } from "../mutations";
 import { createProposal } from "../proposals";
 import {
@@ -42,8 +42,8 @@ export interface ToolDef {
 }
 
 interface ToolSpec {
-  /** null for workspace tools that aren't gated on CRM access rights. */
-  entity: Entity | "workflows" | null;
+  /** null for workspace tools that aren't gated on access rights. */
+  entity: CapabilityEntity | null;
   level: "read" | "write";
   def: ToolDef;
   run: (input: Record<string, unknown>, agent: Agent) => unknown | Promise<unknown>;
@@ -475,7 +475,7 @@ const TOOL_SPECS: ToolSpec[] = [
     },
     run: (input) => updateSalesRep(Number(input.id), { name: str(input.name), email: str(input.email), phone: str(input.phone) }),
   },
-  // ---- workflows (only the built-in Workflow Architect receives these) ----
+  // ---- workflows ----
   {
     entity: "workflows",
     level: "read",
@@ -638,10 +638,8 @@ const TOOL_SPECS: ToolSpec[] = [
 function allowed(agent: Agent, spec: ToolSpec): boolean {
   // Workspace tools (handoff) aren't tied to an entity — every agent gets them.
   if (spec.entity === null) return true;
-  if (spec.entity === "workflows") return agent.kind === "workflow";
   const level = agent.capabilities[spec.entity];
-  if (spec.level === "read") return level === "read" || level === "write";
-  return level === "write";
+  return spec.level === "read" ? canRead(level) : canWrite(level);
 }
 
 /** Tool definitions this agent is allowed to use, given its access rights. */
@@ -655,8 +653,6 @@ export function isWriteTool(name: string): boolean {
 }
 
 const MAX_RESULT_CHARS = 6000;
-const ALWAYS_REQUIRE_APPROVAL = new Set(["create_contact"]);
-
 export interface ToolOutcome {
   result: string;
   ok: boolean;
@@ -674,8 +670,7 @@ export interface ToolOutcome {
  * Execute one tool call on behalf of an agent, enforcing its access rights.
  *
  * This is the single enforcement point: access rights are checked here,
- * contact creation always requires approval, and "ask" agents have their other
- * writes diverted into proposals too. Approving a proposal comes back through
+ * ask-scoped writes are diverted into proposals. Approving a proposal comes back through
  * this same function with `skipApproval`, so the permission check is never
  * bypassed.
  */
@@ -688,19 +683,18 @@ export async function executeTool(
   const spec = TOOL_SPECS.find((s) => s.def.name === name);
   if (!spec) return { result: `Unknown tool: ${name}`, ok: false };
   if (!allowed(agent, spec)) {
-    const access = spec.entity === "workflows" ? agent.kind : agent.capabilities[spec.entity!];
+    const access = agent.capabilities[spec.entity!];
     return {
-      result: `Permission denied: ${agent.name} has "${access}" access to ${spec.entity}, but ${name} requires "${spec.level}". Consider handing this to the Workflow Architect.`,
+      result: `Permission denied: ${agent.name} has "${access}" access to ${spec.entity}, but ${name} requires "${spec.level}". Consider handing this to an agent with Workflow write access.`,
       ok: false,
     };
   }
 
-  // Contact creation is always previewed, even for otherwise autonomous
-  // agents. Other writes follow the agent's autonomy setting. This runs only
+  // Ask-scoped writes are previewed instead of executed. This runs only
   // after the access check, so a proposal cannot ask for more than the agent
   // was already allowed to do.
-  const requiresApproval = ALWAYS_REQUIRE_APPROVAL.has(name) || agent.autonomy === "ask";
-  if (requiresApproval && spec.level === "write" && spec.entity && spec.entity !== "workflows" && !options.skipApproval) {
+  const requiresApproval = spec.entity ? writeRequiresApproval(agent.capabilities[spec.entity]) : false;
+  if (requiresApproval && spec.level === "write" && spec.entity && !options.skipApproval) {
     const proposalId = await createProposal({ agentId: agent.id, tool: name, input: input ?? {} });
     return {
       result: `Filed proposal #${proposalId} for approval — ${name} was NOT executed. The user will approve or reject it. Do not retry this call or try another way around it; tell the user what you proposed and move on.`,

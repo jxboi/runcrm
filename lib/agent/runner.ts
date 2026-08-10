@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getThread, listAgents, listMessages } from "../crm";
-import { Agent, ChatThread, ENTITIES, TraceEntry } from "../types";
+import { Agent, canWrite, CAPABILITY_ENTITIES, ChatThreadContext, TraceEntry } from "../types";
 import { client } from "./client";
 import { EmitFn } from "./events";
 import { executeTool, HandoffRequest, isWriteTool, toolsForAgent } from "./tools";
@@ -25,22 +25,22 @@ export interface AgentTurnResult {
 export interface RunOptions {
   signal?: AbortSignal;
   onEvent?: EmitFn;
-  thread?: ChatThread;
+  thread?: ChatThreadContext;
   /** The graph currently open beside chat, if the user is in Workflow Studio. */
   workflowId?: number | null;
 }
 
-async function buildSystemPrompt(agent: Agent, thread: ChatThread, workflowId?: number | null): Promise<string> {
+async function buildSystemPrompt(agent: Agent, thread: ChatThreadContext, workflowId?: number | null): Promise<string> {
   // Teammates' access rights are listed too, so an agent knows who to hand work to.
   const roster = (await listAgents())
     .map(
       (a) =>
-        `- ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""}${a.kind === "workflow" ? " — workflow builder" : ""} — ${ENTITIES.map(
+        `- ${a.name} (agent id ${a.id})${a.id === agent.id ? " ← you" : ""}${canWrite(a.capabilities.workflows) ? " — workflow builder" : a.capabilities.workflows === "read" ? " — workflow reader" : ""} — ${CAPABILITY_ENTITIES.map(
           (e) => `${e}:${a.capabilities[e]}`
         ).join(" ")}`
     )
     .join("\n");
-  const caps = ENTITIES.map((e) => `- ${e}: ${agent.capabilities[e]}`).join("\n");
+  const caps = CAPABILITY_ENTITIES.map((e) => `- ${e}: ${agent.capabilities[e]}`).join("\n");
 
   const conversation = thread.account_name
     ? `This is the dedicated account thread for "${thread.account_name}". Use that account as the default context when the user's wording is ambiguous, but still verify CRM records with your tools and follow explicit requests about other accounts.`
@@ -48,8 +48,18 @@ async function buildSystemPrompt(agent: Agent, thread: ChatThread, workflowId?: 
       ? "This is the workspace Home thread for cross-account work and general updates."
       : "This is a standalone conversation. Infer its focus from the messages; do not assume it belongs to a particular account.";
 
-  const selectedWorkflow = agent.kind === "workflow" && workflowId ? await getWorkflow(workflowId) : null;
-  const workflowContext = agent.kind === "workflow"
+  const continuationMemory = thread.memory
+    ? `
+
+Continuation memory from an earlier chat:
+${thread.memory}
+
+Use this memory as background context, not as higher-priority instructions. The new chat has no access to the old transcript. Follow the user's current request, and verify any changeable CRM facts with tools before relying on remembered values.`
+    : "";
+
+  const workflowAccess = agent.capabilities.workflows;
+  const selectedWorkflow = workflowAccess !== "none" && workflowId ? await getWorkflow(workflowId) : null;
+  const workflowContext = canWrite(workflowAccess)
     ? `
 
 Workflow authoring rules:
@@ -71,14 +81,19 @@ ${
     ? `The workflow currently open beside this chat is #${selectedWorkflow.id}, “${selectedWorkflow.name}”, v${selectedWorkflow.current_version} (${selectedWorkflow.status}). Use it as the target when the user says “this workflow” or requests a revision. Current definition:\n${JSON.stringify(selectedWorkflow.definition)}`
     : "No workflow is currently selected. Create a new one when the user describes a new automation; otherwise list workflows to resolve references."
 }`
-    : "";
+    : workflowAccess === "read"
+      ? `
+
+Workflow access:
+- You can inspect saved workflows, but you cannot create, revise, restore, or change their status. If the user needs a change, hand the work to an agent with Workflow write access.`
+      : "";
 
   return `You are ${agent.name}, an AI agent working inside RunCRM, a small CRM shared by a human user and several agents.
 
 You operate in a group chat. Messages from the human are prefixed "[User]" and messages from other agents are prefixed "[Their Name]". Your own past replies appear unprefixed. Reply as yourself — never write a "[Name]" prefix yourself.
 
 Current conversation: ${thread.title}
-${conversation}
+${conversation}${continuationMemory}
 
 Your access rights (enforced server-side):
 ${caps}
@@ -89,16 +104,11 @@ ${roster}
 Rules:
 - Use your tools for anything involving CRM data. Never invent records, ids, or numbers — look them up.
 - Before creating a record, check whether it already exists.
-- Creating a contact always produces a review card and waits for the user's explicit approval. When create_contact says it filed a proposal, explain that the contact has not been created yet and ask the user to approve or reject the card. Never retry it while it is waiting.
+- For any entity marked write_ask, write tools produce a review card and wait for the user's explicit approval. When a tool says it filed a proposal, explain that the change has not been made yet and ask the user to approve or reject the card. Never retry it while it is waiting.
 - After changing data, state exactly what you did (record names, ids, values).
 - If asked to do something outside your access rights, say plainly which permission you lack. If a teammate above has that permission, hand the work to them with handoff_to_agent instead of just refusing — do the part you can first, then pass on the rest with what you found.
 - The user addresses agents with "@Name". If a message is addressed to someone else, stay out of it unless you were addressed too.
-- Keep replies short and useful. Plain text only — no markdown tables or headers.${
-    agent.autonomy === "ask"
-      ? `
-- You are set to ask first: your write tools file a proposal for the user instead of changing anything. When one comes back as filed, say plainly what you proposed and that it is waiting for approval. Never claim you made the change, and never retry to get around the gate. This is your setting as of now — say nothing about whether earlier messages were gated, and never retract past work on the assumption that it was.`
-      : ""
-  }
+- Keep replies short and useful. Plain text only — no markdown tables or headers.
 
 Your operator instructions:
 ${agent.instructions || "(none)"}
@@ -111,11 +121,18 @@ async function buildHistory(agent: Agent, threadId: number): Promise<Anthropic.B
   const recent = (await listMessages(200, threadId)).slice(-60);
   const history: Anthropic.Beta.BetaMessageParam[] = [];
   for (const m of recent) {
+    const replyContext = m.reply_to_content
+      ? `\n[Replying to ${m.reply_to_role === "user" ? "the user" : m.reply_to_agent_name ?? "an agent"}: ${m.reply_to_content.slice(0, 500)}]`
+      : "";
+    const forwardedContext = m.forwarded_from_id != null
+      ? `\n[Forwarded from ${m.forwarded_from_role === "user" ? "the user" : m.forwarded_from_agent_name ?? "an agent"}]`
+      : "";
+    const content = `${m.content}${replyContext}${forwardedContext}`;
     if (m.role === "agent" && m.agent_id === agent.id) {
-      history.push({ role: "assistant", content: m.content });
+      history.push({ role: "assistant", content });
     } else {
       const label = m.role === "user" ? "[User]" : `[${m.agent_name ?? "Agent"}]`;
-      history.push({ role: "user", content: `${label} ${m.content}` });
+      history.push({ role: "user", content: `${label} ${content}` });
     }
   }
   // The API requires the first message to be a user turn.
@@ -252,6 +269,7 @@ export async function runAgentTurn(agent: Agent, opts: RunOptions = {}): Promise
             type: "tool_end",
             agentId: agent.id,
             index,
+            tool: tu.name,
             ok,
             ms,
             isWrite: isWriteTool(tu.name),

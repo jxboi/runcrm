@@ -1,15 +1,14 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { AnySQLiteColumn, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const agents = sqliteTable("agents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   emoji: text("emoji").notNull().default("bot"),
-  kind: text("kind").notNull().default("general"),
   instructions: text("instructions").notNull().default(""),
   capabilities: text("capabilities").notNull().default("{}"),
   autonomy: text("autonomy").notNull().default("auto"),
-  model: text("model").notNull().default("claude-opus-5"),
+  model: text("model").notNull().default("claude-sonnet-5"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 });
 
@@ -70,6 +69,11 @@ export const threads = sqliteTable("threads", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   accountName: text("account_name").unique(),
+  pinned: integer("pinned").notNull().default(0),
+  lastReadMessageId: integer("last_read_message_id"),
+  memory: text("memory"),
+  continuedFromThreadId: integer("continued_from_thread_id").references((): AnySQLiteColumn => threads.id, { onDelete: "set null" }),
+  archivedAt: text("archived_at"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
@@ -79,6 +83,13 @@ export const messages = sqliteTable("messages", {
   threadId: integer("thread_id").notNull().default(1).references(() => threads.id),
   agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }), content: text("content").notNull(),
   trace: text("trace").notNull().default("[]"), isError: integer("is_error").notNull().default(0),
+  liked: integer("liked").notNull().default(0),
+  reaction: text("reaction"),
+  pinned: integer("pinned").notNull().default(0),
+  starred: integer("starred").notNull().default(0),
+  feedback: text("feedback"),
+  replyToId: integer("reply_to_id").references((): AnySQLiteColumn => messages.id, { onDelete: "set null" }),
+  forwardedFromId: integer("forwarded_from_id").references((): AnySQLiteColumn => messages.id, { onDelete: "set null" }),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
 }, (table) => [index("idx_messages_agent_id").on(table.agentId), index("idx_messages_thread_id").on(table.threadId, table.id)]);
 

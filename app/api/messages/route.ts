@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
     trace?: TraceEntry[];
     is_error?: boolean;
     thread_id?: number;
+    reply_to_id?: number | null;
+    forwarded_from_id?: number | null;
   };
   try {
     body = await req.json();
@@ -50,6 +52,8 @@ export async function POST(req: NextRequest) {
       content,
       trace: Array.isArray(body.trace) ? body.trace : [],
       is_error: Boolean(body.is_error),
+      reply_to_id: body.reply_to_id == null ? null : Number(body.reply_to_id),
+      forwarded_from_id: body.forwarded_from_id == null ? null : Number(body.forwarded_from_id),
     }),
     { status: 201 }
   );

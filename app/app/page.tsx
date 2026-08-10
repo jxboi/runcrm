@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Agent, ChatMessage, ChatThread, EntityRef, LiveRun, Proposal, Recipient, RunNotice } from "@/lib/types";
+import { Agent, canWrite, ChatMessage, ChatThread, EntityRef, LiveRun, MessageUpdate, Proposal, Recipient, RunNotice, ThreadFilter, ThreadUpdate } from "@/lib/types";
 import { api } from "@/lib/client";
 import { parseMentions } from "@/lib/agent/mentions";
 import { streamRun } from "@/lib/stream";
@@ -9,7 +9,6 @@ import Sidebar from "../components/Sidebar";
 import Chat from "../components/Chat";
 import DataPanel from "../components/DataPanel";
 import AgentModal from "../components/AgentModal";
-import WorkflowStudio from "../components/WorkflowStudio";
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
   const rows = new Map<number, ChatMessage>();
@@ -18,9 +17,14 @@ function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMes
   return [...rows.values()].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id);
 }
 
+function findWorkflowBuilder(agents: Agent[]) {
+  return agents.find((agent) => canWrite(agent.capabilities.workflows));
+}
+
 export default function Workspace() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [threadFilter, setThreadFilter] = useState<ThreadFilter>("active");
   const [activeThreadId, setActiveThreadId] = useState(1);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [recipient, setRecipient] = useState<Recipient>("auto");
@@ -31,9 +35,9 @@ export default function Workspace() {
   const [focusRef, setFocusRef] = useState<EntityRef | null>(null);
   const [modal, setModal] = useState<"closed" | "new" | Agent>("closed");
   const [toast, setToast] = useState<string | null>(null);
-  const [workspaceMode, setWorkspaceMode] = useState<"crm" | "workflows">("crm");
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
-  const [draftSuggestion, setDraftSuggestion] = useState<{ id: number; text: string } | null>(null);
+  const [workflowContexts, setWorkflowContexts] = useState<Record<number, number | null>>({});
+  const workflowEnabled = Object.prototype.hasOwnProperty.call(workflowContexts, activeThreadId);
+  const selectedWorkflowId = workflowContexts[activeThreadId] ?? null;
 
   // One AbortController per request; a request may run several agents in turn.
   const abortersRef = useRef(new Map<string, AbortController>());
@@ -58,14 +62,31 @@ export default function Workspace() {
     setRecipient((cur) => (cur === "auto" || list.some((a) => a.id === cur) ? cur : "auto"));
   }, []);
 
-  const loadThreads = useCallback(async () => {
-    setThreads(await api<ChatThread[]>("/api/threads"));
+  const loadThreads = useCallback(async (filter = threadFilter) => {
+    setThreads(await api<ChatThread[]>(`/api/threads?filter=${filter}`));
+  }, [threadFilter]);
+
+  const setThreadReadState = useCallback(async (threadId: number, read: boolean) => {
+    const changed = await api<ChatThread>(`/api/threads/${threadId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ read }),
+    });
+    setThreads((current) => current.map((thread) => thread.id === threadId ? changed : thread));
+    return changed;
   }, []);
 
-  const loadMessages = useCallback(async (threadId = activeThreadRef.current) => {
+  const changeThreadFilter = useCallback((filter: ThreadFilter) => {
+    setThreadFilter(filter);
+    loadThreads(filter).catch((error) => showToast(error instanceof Error ? error.message : "Couldn't filter conversations"));
+  }, [loadThreads, showToast]);
+
+  const loadMessages = useCallback(async (threadId = activeThreadRef.current, markRead = false) => {
     const rows = await api<ChatMessage[]>(`/api/messages?threadId=${threadId}`);
-    if (activeThreadRef.current === threadId) setMessages(rows);
-  }, []);
+    if (activeThreadRef.current === threadId) {
+      setMessages(rows);
+      if (markRead) void setThreadReadState(threadId, true).catch(() => {});
+    }
+  }, [setThreadReadState]);
 
   const loadProposals = useCallback(async () => {
     setProposals(await api<Proposal[]>("/api/proposals"));
@@ -75,7 +96,7 @@ export default function Workspace() {
     const timer = window.setTimeout(() => {
       loadAgents().catch((e) => showToast(e.message));
       loadThreads().catch((e) => showToast(e.message));
-      loadMessages(1).catch((e) => showToast(e.message));
+      loadMessages(1, true).catch((e) => showToast(e.message));
       loadProposals().catch((e) => showToast(e.message));
     }, 0);
     return () => window.clearTimeout(timer);
@@ -98,12 +119,14 @@ export default function Workspace() {
   }, [loadMessages, loadProposals, loadThreads]);
 
   const selectThread = useCallback((threadId: number) => {
-    setWorkspaceMode("crm");
-    if (threadId === activeThreadRef.current) return;
+    if (threadId === activeThreadRef.current) {
+      loadMessages(threadId, true).catch((e) => showToast(e instanceof Error ? e.message : "Couldn't open that thread"));
+      return;
+    }
     activeThreadRef.current = threadId;
     setActiveThreadId(threadId);
     setMessages([]);
-    loadMessages(threadId).catch((e) => showToast(e instanceof Error ? e.message : "Couldn't open that thread"));
+    loadMessages(threadId, true).catch((e) => showToast(e instanceof Error ? e.message : "Couldn't open that thread"));
   }, [loadMessages, showToast]);
 
   const openThread = useCallback(async (accountName?: string) => {
@@ -120,6 +143,50 @@ export default function Workspace() {
   }, [loadThreads, selectThread, showToast]);
 
   const createThread = useCallback(() => openThread(), [openThread]);
+
+  const updateThread = useCallback(async (threadId: number, update: ThreadUpdate) => {
+    const threadTitle = threads.find((thread) => thread.id === threadId)?.title ?? "Conversation";
+    try {
+      const changed = await api<ChatThread>(`/api/threads/${threadId}`, {
+        method: "PATCH",
+        body: JSON.stringify(update),
+      });
+      const nextThreads = await api<ChatThread[]>(`/api/threads?filter=${threadFilter}`);
+      const applyThreadOrder = () => setThreads(nextThreads);
+      if (document.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        document.startViewTransition(applyThreadOrder);
+      } else {
+        applyThreadOrder();
+      }
+
+      if (update.archived && activeThreadRef.current === threadId) {
+        const fallback = nextThreads.find((thread) => thread.id === 1) ?? nextThreads[0];
+        if (fallback) selectThread(fallback.id);
+      }
+
+      if (update.archived) showToast(`${threadTitle} archived`);
+      else if (update.archived === false) showToast(`${threadTitle} restored`);
+      else if (update.title !== undefined) showToast(`Renamed to ${changed.title}`);
+      else if (update.pinned !== undefined) showToast(`${threadTitle} ${changed.pinned ? "pinned" : "unpinned"}`);
+      else if (update.read !== undefined) showToast(`${threadTitle} marked as ${changed.unread ? "unread" : "read"}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Couldn't update that conversation");
+    }
+  }, [selectThread, showToast, threadFilter, threads]);
+
+  const continueThread = useCallback(async (threadId: number) => {
+    const sourceTitle = threads.find((thread) => thread.id === threadId)?.title ?? "Conversation";
+    showToast(`Compressing ${sourceTitle} into memory…`);
+    try {
+      const thread = await api<ChatThread>(`/api/threads/${threadId}/continue`, { method: "POST" });
+      setThreadFilter("active");
+      await loadThreads("active");
+      selectThread(thread.id);
+      showToast("Started a new chat with the previous conversation in memory");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Couldn't continue that conversation");
+    }
+  }, [loadThreads, selectThread, showToast, threads]);
 
   /** Approve or reject one queued write, then reflect what it did. */
   const decideProposal = useCallback(
@@ -215,8 +282,7 @@ export default function Workspace() {
                     try {
                       const workflowId = Number((JSON.parse(event.result) as { id?: unknown }).id);
                       if (Number.isInteger(workflowId) && workflowId > 0) {
-                        setSelectedWorkflowId(workflowId);
-                        setWorkspaceMode("workflows");
+                        setWorkflowContexts((current) => ({ ...current, [threadId]: workflowId }));
                       }
                     } catch {
                       // The studio still refreshes from dataVersion if an old server returned a non-JSON trace.
@@ -233,6 +299,7 @@ export default function Workspace() {
                   setMessages((cur) => mergeMessages(cur, [
                     { ...event.message, undoable: event.undoable ?? event.message.undoable ?? 0 },
                   ]));
+                  void setThreadReadState(event.message.thread_id, true).catch(() => {});
                 }
                 if (event.proposals?.length) {
                   setProposals((cur) => [...cur, ...event.proposals!]);
@@ -258,7 +325,7 @@ export default function Workspace() {
         loadThreads().catch(() => {});
       }
     },
-    [loadThreads, showToast]
+    [loadThreads, setThreadReadState, showToast]
   );
 
   /**
@@ -288,14 +355,17 @@ export default function Workspace() {
             is_error: false,
           }),
         });
-        if (saved.thread_id === activeThreadRef.current) setMessages((cur) => mergeMessages(cur, [saved]));
+        if (saved.thread_id === activeThreadRef.current) {
+          setMessages((cur) => mergeMessages(cur, [saved]));
+          void setThreadReadState(saved.thread_id, true).catch(() => {});
+        }
         loadThreads().catch(() => {});
       } catch (e) {
         showToast(e instanceof Error ? e.message : "Couldn't save the stopped reply");
       }
       setDataVersion((v) => v + 1);
     },
-    [loadThreads, showToast]
+    [loadThreads, setThreadReadState, showToast]
   );
 
   /** Roll back every change one agent message made, and say what was skipped. */
@@ -325,7 +395,7 @@ export default function Workspace() {
   );
 
   const sendMessage = useCallback(
-    async (content: string): Promise<boolean> => {
+    async (content: string, replyToId?: number): Promise<boolean> => {
       if (agents.length === 0) {
         showToast("Create an agent first");
         return false;
@@ -343,6 +413,7 @@ export default function Workspace() {
       }
 
       // Optimistic echo of the user message until the server hands back the real row.
+      const replyTo = replyToId == null ? null : messages.find((message) => message.id === replyToId) ?? null;
       const optimistic: ChatMessage = {
         id: -Date.now(),
         thread_id: activeThreadRef.current,
@@ -351,6 +422,18 @@ export default function Workspace() {
         content,
         trace: [],
         is_error: false,
+        liked: false,
+        reaction: null,
+        pinned: false,
+        starred: false,
+        feedback: null,
+        reply_to_id: replyTo?.id ?? null,
+        reply_to_content: replyTo?.content ?? null,
+        reply_to_role: replyTo?.role ?? null,
+        reply_to_agent_name: replyTo?.agent_name ?? null,
+        forwarded_from_id: null,
+        forwarded_from_role: null,
+        forwarded_from_agent_name: null,
         created_at: new Date().toISOString().replace("T", " ").slice(0, 19),
       };
       setMessages((cur) => [...cur, optimistic]);
@@ -363,7 +446,8 @@ export default function Workspace() {
           content,
           agentId: recipient,
           threadId,
-          context: workspaceMode === "workflows" ? { workflowId: selectedWorkflowId } : undefined,
+          replyToId: replyTo?.id ?? null,
+          context: workflowEnabled ? { workflowId: selectedWorkflowId } : undefined,
         },
         `chat-${optimistic.id}`,
         threadId,
@@ -372,20 +456,79 @@ export default function Workspace() {
       if (!ok) setMessages((cur) => cur.filter((m) => m.id !== optimistic.id));
       return ok;
     },
-    [agents, recipient, selectedWorkflowId, showToast, startRun, workspaceMode]
+    [agents, messages, recipient, selectedWorkflowId, showToast, startRun, workflowEnabled]
   );
 
-  const openWorkflowStudio = useCallback(() => {
-    setWorkspaceMode("workflows");
-    const architect = agents.find((agent) => agent.kind === "workflow");
-    if (architect) setRecipient(architect.id);
+  const enableWorkflow = useCallback(() => {
+    const builder = findWorkflowBuilder(agents);
+    if (!builder) {
+      showToast("Give an agent Workflow write access before adding Workflow to this chat");
+      return;
+    }
+    const threadId = activeThreadRef.current;
+    setWorkflowContexts((current) => ({ ...current, [threadId]: current[threadId] ?? null }));
+    setRecipient(builder.id);
+  }, [agents, showToast]);
+
+  const disableWorkflow = useCallback(() => {
+    const threadId = activeThreadRef.current;
+    setWorkflowContexts((current) => {
+      const next = { ...current };
+      delete next[threadId];
+      return next;
+    });
+    const builder = findWorkflowBuilder(agents);
+    if (builder) setRecipient((current) => current === builder.id ? "auto" : current);
   }, [agents]);
 
-  const draftWorkflowPrompt = useCallback((text: string) => {
-    const architect = agents.find((agent) => agent.kind === "workflow");
-    if (architect) setRecipient(architect.id);
-    setDraftSuggestion({ id: Date.now(), text });
-  }, [agents]);
+  const updateChatMessage = useCallback(
+    async (message: ChatMessage, update: MessageUpdate) => {
+      setMessages((current) => current.map((item) => (item.id === message.id ? { ...item, ...update } : item)));
+      try {
+        const saved = await api<ChatMessage>(`/api/messages/${message.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(update),
+        });
+        setMessages((current) => mergeMessages(current, [saved]));
+      } catch (error) {
+        setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
+        showToast(error instanceof Error ? error.message : "Couldn't update that message");
+        throw error;
+      }
+    },
+    [showToast]
+  );
+
+  const forwardChatMessage = useCallback(
+    async (message: ChatMessage, threadId: number) => {
+      const saved = await api<ChatMessage>("/api/messages", {
+        method: "POST",
+        body: JSON.stringify({
+          role: "user",
+          thread_id: threadId,
+          content: message.content,
+          forwarded_from_id: message.id,
+        }),
+      });
+      if (threadId === activeThreadRef.current) setMessages((current) => mergeMessages(current, [saved]));
+      await loadThreads();
+      showToast(`Forwarded to ${threads.find((item) => item.id === threadId)?.title ?? "conversation"}`);
+    },
+    [loadThreads, showToast, threads]
+  );
+
+  const deleteChatMessage = useCallback(
+    async (message: ChatMessage) => {
+      const changeWarning = (message.undoable ?? 0) > 0
+        ? ` This will not undo the ${message.undoable} CRM change${message.undoable === 1 ? "" : "s"} it made.`
+        : "";
+      if (!window.confirm(`Delete this message?${changeWarning}`)) return;
+      await api(`/api/messages/${message.id}`, { method: "DELETE" });
+      setMessages((current) => current.filter((item) => item.id !== message.id));
+      await loadThreads();
+    },
+    [loadThreads]
+  );
 
   const runTask = useCallback(
     async (taskId: number, assigneeId: number | null) => {
@@ -444,6 +587,9 @@ export default function Workspace() {
     id: 1,
     title: "Home",
     account_name: null,
+    pinned: false,
+    unread: false,
+    archived_at: null,
     message_count: 0,
     last_message: null,
     last_message_at: null,
@@ -462,16 +608,18 @@ export default function Workspace() {
           activeThreadId={activeThreadId}
           onSelectThread={selectThread}
           onCreateThread={createThread}
+          onUpdateThread={updateThread}
+          onContinueThread={continueThread}
+          threadFilter={threadFilter}
+          onThreadFilterChange={changeThreadFilter}
           agents={agents}
           selectedAgentId={recipient === "auto" ? null : recipient}
           busyAgentIds={busyAgentIds}
           onSelect={setRecipient}
           onNewAgent={() => setModal("new")}
           onEditAgent={(a) => setModal(a)}
-          workspaceMode={workspaceMode}
-          onOpenWorkflowStudio={openWorkflowStudio}
         />
-        <main className={`crm-canvas flex min-w-0 flex-col border-l border-slate-800/90 bg-slate-950 ${workspaceMode === "workflows" ? "w-[clamp(22.5rem,30vw,27.5rem)] shrink-0 border-r" : "flex-1 border-r"}`}>
+        <main className="crm-canvas flex min-w-0 flex-1 flex-col border-l border-r border-slate-800/90 bg-slate-950">
           <Chat
             key={activeThread.id}
             thread={activeThread}
@@ -484,36 +632,28 @@ export default function Workspace() {
             onSend={sendMessage}
             onStop={stopRun}
             onUndo={undoMessage}
+            threads={threads}
+            onUpdateMessage={updateChatMessage}
+            onForwardMessage={forwardChatMessage}
+            onDeleteMessage={deleteChatMessage}
+            onNotify={showToast}
             onFocusRecord={setFocusRef}
             proposals={activeProposals}
             onDecideProposal={decideProposal}
-            workflowContext={workspaceMode === "workflows" ? { name: selectedWorkflowId ? `workflow #${selectedWorkflowId}` : null } : null}
-            draftSuggestion={draftSuggestion}
+            workflowContext={workflowEnabled ? { name: selectedWorkflowId ? `workflow #${selectedWorkflowId}` : null } : null}
+            onEnableWorkflow={enableWorkflow}
+            onDisableWorkflow={disableWorkflow}
           />
         </main>
-        {workspaceMode === "workflows" ? (
-          <WorkflowStudio
-            version={dataVersion}
-            selectedWorkflowId={selectedWorkflowId}
-            architectName={agents.find((agent) => agent.kind === "workflow")?.name ?? "Workflow Architect"}
-            onSelectWorkflow={setSelectedWorkflowId}
-            onDraftPrompt={draftWorkflowPrompt}
-            onSendPrompt={sendMessage}
-            onClose={() => setWorkspaceMode("crm")}
-            onError={showToast}
-          />
-        ) : (
-          <DataPanel
-            agents={agents}
-            version={dataVersion}
-            busyAgentIds={busyAgentIds}
-            focusRef={focusRef}
-            onRunTask={runTask}
-            onRunRoutine={runRoutine}
-            onOpenAccountThread={openThread}
-            onError={showToast}
-          />
-        )}
+        <DataPanel
+          agents={agents}
+          version={dataVersion}
+          busyAgentIds={busyAgentIds}
+          focusRef={focusRef}
+          onRunTask={runTask}
+          onRunRoutine={runRoutine}
+          onError={showToast}
+        />
       </div>
 
       {modal !== "closed" && (
@@ -526,7 +666,7 @@ export default function Workspace() {
       )}
 
       {toast && (
-        <div role="alert" className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-rose-500/40 bg-rose-950/90 px-4 py-2 text-sm text-rose-200 shadow-xl">
+        <div role="alert" className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-rose-500/40 bg-rose-950/90 px-4 py-2 text-sm text-rose-200">
           {toast}
         </div>
       )}

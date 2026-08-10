@@ -6,6 +6,8 @@ const DOT: Record<AccessLevel, string> = {
   none: "bg-slate-700",
   read: "bg-sky-500",
   write: "bg-emerald-500",
+  write_ask: "bg-amber-500",
+  write_full: "bg-emerald-500",
 };
 
 type Hire = {
@@ -21,15 +23,16 @@ const caps = (
   deals: AccessLevel,
   activities: AccessLevel,
   tasks: AccessLevel,
-  salesReps: AccessLevel = "read"
-): Capabilities => ({ contacts, deals, activities, tasks, sales_reps: salesReps });
+  salesReps: AccessLevel = "read",
+  workflows: AccessLevel = "none"
+): Capabilities => ({ contacts, deals, activities, tasks, sales_reps: salesReps, workflows });
 
 const ROSTER: Hire[] = [
   {
     icon: "search",
     name: "The Researcher",
     brief: "Enrich inbound leads, build the account dossier, dedupe on sight.",
-    capabilities: caps("write", "read", "write", "read"),
+    capabilities: caps("write_full", "read", "write_full", "read"),
     status: "live",
   },
   {
@@ -43,28 +46,28 @@ const ROSTER: Hire[] = [
     icon: "briefcase",
     name: "The Sales Assistant",
     brief: "Draft the follow-up, log the call, keep every record current.",
-    capabilities: caps("write", "write", "write", "write"),
+    capabilities: caps("write_full", "write_full", "write_full", "write_full"),
     status: "live",
   },
   {
     icon: "trash",
     name: "The Janitor",
     brief: "Sweep for stale stages and orphaned deals. File fix-it proposals.",
-    capabilities: caps("read", "read", "read", "write"),
+    capabilities: caps("read", "read", "read", "write_ask"),
     status: "live",
   },
   {
     icon: "clock",
     name: "The Renewals Watchdog",
     brief: "Own the renewal calendar. Wake on date windows, not on messages.",
-    capabilities: caps("read", "write", "write", "write"),
+    capabilities: caps("read", "write_full", "write_full", "write_full"),
     status: "next",
   },
   {
     icon: "compass",
     name: "The Coordinator",
     brief: "Split a big ask into tasks, route each to whoever holds the badge.",
-    capabilities: caps("none", "read", "none", "write"),
+    capabilities: caps("none", "read", "none", "write_full"),
     status: "next",
   },
 ];
