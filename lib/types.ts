@@ -367,6 +367,7 @@ export const MESSAGE_FEEDBACK = ["helpful", "needs_improvement", "incorrect", "u
 export type MessageFeedback = (typeof MESSAGE_FEEDBACK)[number];
 
 export interface MessageUpdate {
+  content?: string;
   reaction?: MessageReaction | null;
   pinned?: boolean;
   starred?: boolean;

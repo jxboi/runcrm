@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { AccessLevel, Agent, CAPABILITY_ENTITIES, Capabilities } from "@/lib/types";
 import { AGENT_ICON_OPTIONS, AgentIcon, agentIconKey } from "@/app/components/AgentIcon";
 import DropdownMenu from "@/app/components/DropdownMenu";
@@ -26,7 +27,7 @@ const LEVELS = [
   { value: "write_ask", label: "Write" },
   { value: "write_full", label: "Full" },
 ] as const satisfies readonly { value: AccessLevel; label: string }[];
-const ACCESS_LABELS = { contacts: "Contacts", deals: "Deals", activities: "Activities", tasks: "Tasks", sales_reps: "Sales reps", workflows: "Workflow" } as const;
+const ACCESS_LABELS = { contacts: "Contacts", deals: "Deals", activities: "Activities", tasks: "Tasks", sales_reps: "Sales Reps", workflows: "Workflow" } as const;
 
 export default function AgentModal({
   agent,
@@ -42,6 +43,8 @@ export default function AgentModal({
   const [name, setName] = useState(agent?.name ?? "");
   const [iconKey, setIconKey] = useState(() => agentIconKey(agent?.emoji, agent?.name));
   const [model, setModel] = useState(agent?.model ?? "claude-sonnet-5");
+  const [modelOpen, setModelOpen] = useState(false);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const [instructions, setInstructions] = useState(agent?.instructions ?? "");
   const [caps, setCaps] = useState<Capabilities>(() => {
     const initial = agent?.capabilities ?? { contacts: "read", deals: "read", activities: "read", tasks: "read", sales_reps: "read", workflows: "none" };
@@ -54,6 +57,22 @@ export default function AgentModal({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!modelOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!modelMenuRef.current?.contains(event.target as Node)) setModelOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setModelOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [modelOpen]);
 
   const submit = async () => {
     if (!name.trim()) {
@@ -117,15 +136,43 @@ export default function AgentModal({
 
           <div>
             <label className="text-[11px] font-medium text-slate-400">Model</label>
-            <DropdownMenu
-              options={MODELS}
-              value={model}
-              onChange={setModel}
-              id="agent-model"
-              ariaLabel="Agent model"
-              className="mt-1 w-full"
-              buttonClassName="h-9 rounded-lg border-slate-700 bg-slate-950 px-3 text-sm text-slate-200"
-            />
+            <div ref={modelMenuRef} className="relative mt-1">
+              <button
+                type="button"
+                id="agent-model"
+                aria-label="Agent model"
+                aria-haspopup="listbox"
+                aria-expanded={modelOpen}
+                onClick={() => setModelOpen((open) => !open)}
+                className="flex h-9 w-full items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-3 text-left text-sm text-slate-200 outline-none transition hover:border-slate-500 focus:border-slate-500"
+              >
+                <span className="min-w-0 truncate">{MODELS.find((option) => option.id === model)?.label ?? MODELS[0].label}</span>
+                <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${modelOpen ? "rotate-180" : ""}`} strokeWidth={2} />
+              </button>
+              {modelOpen && (
+                <div role="listbox" aria-label="Agent model options" className="absolute left-0 top-full z-50 mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 p-1.5 text-slate-200 shadow-xl">
+                  {MODELS.map((option) => {
+                    const selected = model === option.id;
+                    return (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        key={option.id}
+                        onClick={() => {
+                          setModel(option.id);
+                          setModelOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition ${selected ? "bg-slate-800 text-slate-100" : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"}`}
+                      >
+                        <span className="whitespace-nowrap">{option.label}</span>
+                        {selected && <span aria-hidden="true" className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>

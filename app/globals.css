@@ -87,6 +87,10 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+.crm-sidebar-toggle:focus-visible {
+  outline: none;
+}
+
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {

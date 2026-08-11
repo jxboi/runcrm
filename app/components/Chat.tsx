@@ -6,24 +6,21 @@ import {
   BookOpen,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   CircleX,
-  Copy,
-  Forward,
   LoaderCircle,
   Clock3,
+  Copy,
   Lightbulb,
   MessageSquare,
   Pause,
   Pin,
+  Pencil,
   Reply,
-  SmilePlus,
   Sparkles,
   Plus,
   Square,
   Star,
-  Trash2,
   Undo2,
   UserPlus,
   Workflow,
@@ -50,12 +47,16 @@ import {
 import { MENTION_PATTERN, nameKey } from "@/lib/agent/mentions";
 import { fmtMessageDate, fmtMessageTime, isSameMessageDay } from "@/lib/client";
 import { AgentIcon } from "@/app/components/AgentIcon";
+import { SidebarToggleIcon } from "@/app/components/Sidebar";
 
 type MessageMenuView = "actions" | "reactions" | "forward" | "feedback";
 type MessageMenuState = {
   message: ChatMessage;
   x: number;
   y: number;
+  anchorTop?: number;
+  source: "button" | "context";
+  selectedText?: string;
   view: MessageMenuView;
 };
 
@@ -82,6 +83,8 @@ export default function Chat({
   onEnableWorkflow,
   onDisableWorkflow,
   draftSuggestion,
+  sidebarCollapsed,
+  onToggleSidebar,
 }: {
   thread: ChatThread;
   agents: Agent[];
@@ -90,7 +93,7 @@ export default function Chat({
   onSelectRecipient: (recipient: Recipient) => void;
   runs: LiveRun[];
   notices: RunNotice[];
-  onSend: (content: string, replyToId?: number) => Promise<boolean>;
+  onSend: (content: string, replyToId?: number, annotationText?: string) => Promise<boolean>;
   onStop: (runKey: string, agentId: number) => void;
   onUndo: (messageId: number) => void;
   threads: ChatThread[];
@@ -105,6 +108,8 @@ export default function Chat({
   onEnableWorkflow: () => void;
   onDisableWorkflow: () => void;
   draftSuggestion?: { id: number; text: string } | null;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -112,6 +117,8 @@ export default function Chat({
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [replyingToQuote, setReplyingToQuote] = useState<string | null>(null);
+  const [annotationText, setAnnotationText] = useState<string | null>(null);
   const [messageMenu, setMessageMenu] = useState<MessageMenuState | null>(null);
   const [handledSuggestionId, setHandledSuggestionId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -151,15 +158,20 @@ export default function Chat({
   useEffect(() => {
     if (!messageMenu) return;
     const close = () => setMessageMenu(null);
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-message-context-menu]")) return;
+      close();
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
-    document.addEventListener("pointerdown", close);
+    document.addEventListener("pointerdown", dismissOutside);
     window.addEventListener("resize", close);
     window.addEventListener("scroll", close, true);
     window.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("pointerdown", dismissOutside);
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("keydown", onKey);
@@ -240,48 +252,67 @@ export default function Chat({
     const content = draft.trim();
     if (!content) return;
     const reply = replyingTo;
+    const annotation = annotationText;
     setDraft("");
     setMentionQuery(null);
-    const ok = await onSend(content, reply?.id);
+    const ok = await onSend(content, reply?.id, annotation ?? undefined);
     // Never lose what the user typed: put it back if the send didn't land and
     // they haven't already started typing something else.
     if (!ok) setDraft((cur) => cur || content);
-    else setReplyingTo(null);
+    else {
+      setReplyingTo(null);
+      setReplyingToQuote(null);
+      setAnnotationText(null);
+    }
   };
 
-  const openMessageMenu = (message: ChatMessage, x: number, y: number) => {
+  const openMessageMenu = (
+    message: ChatMessage,
+    x: number,
+    y: number,
+    anchorTop?: number,
+    source: "button" | "context" = "button",
+    selectedText?: string
+  ) => {
     if (message.id < 1) return;
-    const width = 264;
-    const estimatedHeight = 520;
+    const width = 144;
     setMessageMenu({
       message,
       x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
-      y: Math.max(8, Math.min(y, window.innerHeight - estimatedHeight - 8)),
+      y,
+      anchorTop,
+      source,
+      selectedText,
       view: "actions",
     });
   };
 
   const replyToMessage = (message: ChatMessage) => {
     setReplyingTo(message);
+    setReplyingToQuote(null);
+    setAnnotationText(null);
     setMessageMenu(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  const askAboutMessage = (message: ChatMessage) => {
-    setReplyingTo(message);
-    setDraft("What should I know or do about this?");
+  const askAboutMessage = (selectedText?: string) => {
+    if (!selectedText) return;
+    setReplyingTo(null);
+    setReplyingToQuote(null);
+    setAnnotationText(selectedText);
+    setDraft("");
     setMessageMenu(null);
     requestAnimationFrame(() => {
       const input = inputRef.current;
       input?.focus();
-      input?.setSelectionRange(0, input.value.length);
+      input?.setSelectionRange(0, 0);
     });
   };
 
-  const copyMessage = async (message: ChatMessage) => {
+  const copyMessage = async (message: ChatMessage, selectedText?: string) => {
     try {
-      await navigator.clipboard.writeText(message.content);
-      onNotify("Message copied");
+      await navigator.clipboard.writeText(selectedText || message.content);
+      onNotify(selectedText ? "Selection copied" : "Message copied");
     } catch {
       onNotify("Couldn't copy that message");
     } finally {
@@ -400,8 +431,19 @@ export default function Chat({
       <header className="crm-chat-header flex h-16 shrink-0 items-center border-b border-slate-800/70 px-6">
         <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-4">
           <div className="flex min-w-0 items-center">
+            {sidebarCollapsed && (
+              <button
+                type="button"
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+                onClick={onToggleSidebar}
+                className="crm-sidebar-toggle -ml-2 mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-transparent text-slate-500 transition-colors hover:bg-[#f1f1f3] hover:text-slate-400"
+              >
+                <SidebarToggleIcon collapsed />
+              </button>
+            )}
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold leading-5 tracking-tight text-slate-100">
+              <h1 className="truncate text-base font-normal leading-5 tracking-tight text-slate-100">
                 {thread.title}
               </h1>
               {(workflowContext || thread.account_name || thread.id !== 1) && (
@@ -460,6 +502,8 @@ export default function Chat({
                   onOpenMenu={openMessageMenu}
                   onFocusRecord={onFocusRecord}
                   onDecideProposal={onDecideProposal}
+                  onUpdateMessage={onUpdateMessage}
+                  onNotify={onNotify}
                 />
               </div>
             );
@@ -492,11 +536,14 @@ export default function Chat({
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
                   Replying to {replyingTo.role === "user" ? "you" : replyingTo.agent_name ?? "Agent"}
                 </div>
-                <div className="truncate text-xs text-slate-400">{replyingTo.content}</div>
+                <div className="truncate text-xs text-slate-400">{replyingToQuote ?? replyingTo.content}</div>
               </div>
               <button
                 type="button"
-                onClick={() => setReplyingTo(null)}
+                onClick={() => {
+                  setReplyingTo(null);
+                  setReplyingToQuote(null);
+                }}
                 aria-label="Cancel reply"
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-800 hover:text-slate-200"
               >
@@ -605,6 +652,14 @@ export default function Chat({
             )}
 
             <div className="grid min-h-[80px] grid-cols-[auto_1fr_auto] grid-rows-[1fr_auto] gap-1 rounded-[20px] border border-slate-700/45 bg-slate-950 p-2 shadow-[0_12px_30px_rgba(17,18,22,0.1)] transition">
+              {annotationText && (
+                <div className="pointer-events-none col-span-3 col-start-1 row-start-1 z-10 self-start px-1.5 pt-1.5">
+                  <span className="inline-flex h-7 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-950 px-2.5 text-[13px] font-medium text-slate-200">
+                    <MessageSquare aria-hidden="true" className="h-3.5 w-3.5 text-slate-500" strokeWidth={1.8} />
+                    1 annotation
+                  </span>
+                </div>
+              )}
               <button
                 type="button"
                 aria-label="Add to chat"
@@ -662,7 +717,7 @@ export default function Chat({
                 onKeyDown={onKeyDown}
                 rows={isEmpty ? 1 : Math.min(5, Math.max(1, draft.split("\n").length))}
                 placeholder={placeholder}
-                className="col-span-3 col-start-1 row-start-1 max-h-40 w-full resize-none self-stretch bg-transparent px-1.5 py-1 text-sm leading-5 text-slate-200 placeholder:text-slate-500 focus:outline-none"
+                className={`col-span-3 col-start-1 row-start-1 max-h-40 w-full resize-none self-stretch bg-transparent px-1.5 pb-1 text-sm leading-5 text-slate-200 placeholder:text-slate-500 focus:outline-none ${annotationText ? "pt-11" : "pt-1"}`}
                 disabled={agents.length === 0}
               />
               <button
@@ -708,7 +763,7 @@ export default function Chat({
           currentThreadId={thread.id}
           onChangeView={(view) => setMessageMenu((current) => (current ? { ...current, view } : null))}
           onReply={() => replyToMessage(messageMenu.message)}
-          onCopy={() => void copyMessage(messageMenu.message)}
+          onCopy={() => void copyMessage(messageMenu.message, messageMenu.selectedText)}
           onReact={(reaction) => {
             setMessageMenu(null);
             void onUpdateMessage(messageMenu.message, {
@@ -721,15 +776,7 @@ export default function Chat({
               onNotify(error instanceof Error ? error.message : "Couldn't forward that message");
             });
           }}
-          onTogglePin={() => {
-            setMessageMenu(null);
-            void onUpdateMessage(messageMenu.message, { pinned: !messageMenu.message.pinned }).catch(() => {});
-          }}
-          onAsk={() => askAboutMessage(messageMenu.message)}
-          onToggleStar={() => {
-            setMessageMenu(null);
-            void onUpdateMessage(messageMenu.message, { starred: !messageMenu.message.starred }).catch(() => {});
-          }}
+          onAsk={() => askAboutMessage(messageMenu.selectedText)}
           onFeedback={(feedback) => {
             setMessageMenu(null);
             void onUpdateMessage(messageMenu.message, { feedback }).then(() => onNotify("Feedback saved")).catch(() => {});
@@ -852,7 +899,7 @@ function withMentions(content: string, agents: Agent[]) {
     const at = (match.index ?? 0) + match[0].indexOf("@");
     parts.push(content.slice(cursor, at));
     parts.push(
-      <span key={`${at}-${agent.id}`} className="inline-flex align-middle items-center gap-1 font-semibold text-indigo-600">
+      <span key={`${at}-${agent.id}`} className="mr-1 inline-flex align-middle items-center gap-1 font-semibold text-indigo-600">
         <AgentIcon icon={agent.emoji} name={agent.name} className="h-3.5 w-3.5 shrink-0" />
         {agent.name}
       </span>
@@ -1055,39 +1102,147 @@ function MessageBubble({
   onOpenMenu,
   onFocusRecord,
   onDecideProposal,
+  onUpdateMessage,
+  onNotify,
 }: {
   message: ChatMessage;
   agents: Agent[];
   proposals: Proposal[];
   onUndo: () => void;
-  onOpenMenu: (message: ChatMessage, x: number, y: number) => void;
+  onOpenMenu: (
+    message: ChatMessage,
+    x: number,
+    y: number,
+    anchorTop?: number,
+    source?: "button" | "context",
+    selectedText?: string
+  ) => void;
   onFocusRecord: (ref: EntityRef) => void;
   onDecideProposal: (id: number, decision: "approve" | "reject") => Promise<void>;
+  onUpdateMessage: (message: ChatMessage, update: MessageUpdate) => Promise<void>;
+  onNotify: (text: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(message.content);
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const openFromButton = (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    onOpenMenu(message, rect.left, rect.bottom + 4);
+    onOpenMenu(message, rect.left, rect.bottom + 4, rect.top);
   };
   const openFromContext = (event: React.MouseEvent) => {
     event.preventDefault();
-    onOpenMenu(message, event.clientX, event.clientY);
+    const selectedText = window.getSelection()?.toString().trim() || undefined;
+    onOpenMenu(message, event.clientX, event.clientY, undefined, "context", selectedText);
+  };
+
+  const copyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      onNotify("Message copied");
+    } catch {
+      onNotify("Couldn't copy that message");
+    }
+  };
+
+  const saveEdit = async () => {
+    const content = editDraft.trim();
+    if (!content) {
+      onNotify("Message content is required");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await onUpdateMessage(message, { content });
+      setEditing(false);
+    } catch {
+      // The parent displays the request error and restores the previous message.
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   if (message.role === "user") {
     return (
       <div className="flex justify-end" onContextMenu={openFromContext}>
-        <div className="crm-user-turn max-w-[66%]">
-          <div className="group relative rounded-2xl rounded-tr-sm bg-slate-900 px-3 pb-6 pr-9 pt-2 text-sm leading-relaxed text-slate-200">
-            <MessageMenuChevron onClick={openFromButton} inverse />
-            {message.forwarded_from_id != null && (
-              <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-indigo-100/70">
-                Forwarded from {message.forwarded_from_role === "user" ? "you" : message.forwarded_from_agent_name ?? "Agent"}
+        <div className="crm-user-turn group max-w-[66%]">
+          {editing ? (
+            <div className="rounded-2xl rounded-tr-sm bg-slate-900 p-3 text-sm leading-relaxed text-slate-200">
+              <textarea
+                aria-label="Edit message"
+                autoFocus
+                value={editDraft}
+                onChange={(event) => setEditDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                    event.preventDefault();
+                    void saveEdit();
+                  }
+                }}
+                rows={3}
+                className="min-h-16 w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-slate-200 focus:outline-none"
+              />
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditDraft(message.content);
+                    setEditing(false);
+                  }}
+                  disabled={savingEdit}
+                  className="rounded-xl bg-white px-3 py-1.5 text-sm text-slate-900 transition hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void saveEdit()}
+                  disabled={savingEdit || !editDraft.trim()}
+                  className="rounded-xl bg-slate-100 px-3 py-1.5 text-sm text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingEdit ? "Saving…" : "Send"}
+                </button>
               </div>
-            )}
-            {message.reply_to_content && <QuotedMessage message={message} inverse />}
-            <div className="whitespace-pre-wrap">{withMentions(message.content, agents)}</div>
-            <BubbleMeta message={message} inverse />
-          </div>
+            </div>
+          ) : (
+            <>
+              <div className="relative rounded-2xl rounded-tr-sm bg-slate-900 px-3 pb-2 pr-9 pt-2 text-sm leading-relaxed text-slate-200">
+                <MessageMenuChevron onClick={openFromButton} inverse />
+                {message.forwarded_from_id != null && (
+                  <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-indigo-100/70">
+                    Forwarded from {message.forwarded_from_role === "user" ? "you" : message.forwarded_from_agent_name ?? "Agent"}
+                  </div>
+                )}
+                {message.reply_to_content && <QuotedMessage message={message} inverse />}
+                <div className="whitespace-pre-wrap">{withMentions(message.content, agents)}</div>
+                <BubbleMeta message={message} inverse />
+              </div>
+              <div className="flex items-center justify-end gap-2 pr-2 pt-1 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <span className="text-[11px] tabular-nums">{fmtMessageTime(message.created_at)}</span>
+                <button
+                  type="button"
+                  aria-label="Copy message"
+                  title="Copy message"
+                  onClick={() => void copyMessage()}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md transition hover:bg-slate-900 hover:text-slate-300"
+                >
+                  <Copy aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Edit message"
+                  title="Edit message"
+                  onClick={() => {
+                    setEditDraft(message.content);
+                    setEditing(true);
+                  }}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md transition hover:bg-slate-900 hover:text-slate-300"
+                >
+                  <Pencil aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1099,9 +1254,10 @@ function MessageBubble({
   return (
     <div className="flex items-start" onContextMenu={openFromContext}>
       <div className="crm-agent-turn max-w-[80%] min-w-0">
-        <div className="mb-1 flex items-center gap-2 pl-1">
+        <div className="group mb-1 flex items-center gap-2 pl-1">
           <AgentIcon icon={message.agent_emoji} name={message.agent_name} className="h-4 w-4 shrink-0 text-indigo-500" />
           <span className="text-xs font-semibold text-slate-200">{message.agent_name ?? "Agent"}</span>
+          <MessageMenuChevron onClick={openFromButton} inline />
         </div>
         <div
           className={`group relative rounded-2xl rounded-tl-sm pb-3 pl-1 pr-10 pt-3 text-sm leading-relaxed ${
@@ -1112,7 +1268,6 @@ function MessageBubble({
                 : "bg-transparent text-slate-200"
           }`}
         >
-          <MessageMenuChevron onClick={openFromButton} />
           {message.forwarded_from_id != null && (
             <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
               Forwarded from {message.forwarded_from_role === "user" ? "you" : message.forwarded_from_agent_name ?? "Agent"}
@@ -1129,12 +1284,12 @@ function MessageBubble({
           </div>
         )}
 
-        <div className="mt-1.5 flex items-baseline justify-between gap-4 pl-1 pr-3">
+        <div className="mt-1.5 flex items-baseline justify-between gap-4 pr-3">
           <div className="flex min-w-0 flex-wrap items-start gap-2">
             {message.trace.length > 0 && (
-              <details className="group min-w-0">
-                <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[11px] text-slate-400 transition hover:bg-slate-900/65 hover:text-slate-200">
-                  <ChevronRight aria-hidden="true" className="h-3 w-3 transition-transform group-open:rotate-90" />
+              <details className="group ml-1 min-w-0">
+                <summary className="relative inline-flex min-h-6 cursor-pointer items-center rounded-md py-0.5 pl-4 text-[11px] text-slate-400 transition hover:bg-slate-900/65 hover:text-slate-200">
+                  <ChevronRight aria-hidden="true" className="absolute left-0 top-1/2 h-3 w-3 -translate-y-1/2 transition-transform group-open:rotate-90" />
                   <span>{message.trace.length} tool call{message.trace.length > 1 ? "s" : ""} · receipts</span>
                 </summary>
                 <div className="mt-1.5 space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
@@ -1167,9 +1322,11 @@ function MessageBubble({
 function MessageMenuChevron({
   onClick,
   inverse = false,
+  inline = false,
 }: {
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   inverse?: boolean;
+  inline?: boolean;
 }) {
   return (
     <button
@@ -1177,7 +1334,11 @@ function MessageMenuChevron({
       aria-label="More message options"
       aria-haspopup="menu"
       onClick={onClick}
-        className={`absolute right-1.5 top-1.5 z-10 inline-flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 ${
+        className={`${
+          inline
+            ? "relative h-5 w-5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+            : "absolute right-1.5 top-1.5 z-10 h-5 w-5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+        } inline-flex items-center justify-center rounded-full transition focus:opacity-100 ${
         inverse
           ? "bg-transparent text-slate-500 hover:bg-slate-700/10 hover:text-slate-700"
           : "bg-slate-900/10 text-slate-500 backdrop-blur-sm hover:bg-slate-900/20 hover:text-slate-700"
@@ -1206,9 +1367,6 @@ function BubbleMeta({ message, inverse = false, inline = false }: { message: Cha
       {message.reaction && <span className="text-sm" title="Reaction">{message.reaction}</span>}
       {message.pinned && <Pin aria-label="Pinned" className={`h-3 w-3 ${inverse ? "text-slate-500" : "text-slate-400"}`} fill="currentColor" />}
       {message.starred && <Star aria-label="Starred" className={`h-3 w-3 ${inverse ? "text-amber-200" : "text-amber-400"}`} fill="currentColor" />}
-      <span className={`text-[10px] ${inverse ? "text-slate-500" : "text-slate-400"}`}>
-        {fmtMessageTime(message.created_at)}
-      </span>
     </span>
   );
 }
@@ -1222,9 +1380,7 @@ function MessageContextMenu({
   onCopy,
   onReact,
   onForward,
-  onTogglePin,
   onAsk,
-  onToggleStar,
   onFeedback,
   onDelete,
 }: {
@@ -1236,12 +1392,12 @@ function MessageContextMenu({
   onCopy: () => void;
   onReact: (reaction: MessageReaction) => void;
   onForward: (threadId: number) => void;
-  onTogglePin: () => void;
   onAsk: () => void;
-  onToggleStar: () => void;
   onFeedback: (feedback: MessageFeedback) => void;
   onDelete: () => void;
 }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuTop, setMenuTop] = useState(state.y);
   const otherThreads = threads.filter((thread) => thread.id !== currentThreadId);
   const feedbackLabels: Record<MessageFeedback, string> = {
     helpful: "Helpful",
@@ -1250,56 +1406,50 @@ function MessageContextMenu({
     unsafe: "Unsafe or concerning",
   };
 
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+
+    const height = menu.getBoundingClientRect().height;
+    const padding = 8;
+    const fitsBelow = state.y + height <= window.innerHeight - padding;
+    const preferredTop = fitsBelow
+      ? state.y
+      : (state.anchorTop ?? state.y) - height - 4;
+    const nextTop = Math.max(padding, Math.min(preferredTop, window.innerHeight - height - padding));
+    setMenuTop((current) => (current === nextTop ? current : nextTop));
+  }, [state.anchorTop, state.view, state.x, state.y]);
+
   return (
     <div
       role="menu"
       aria-label="Message options"
+      data-message-context-menu
+      ref={menuRef}
       onPointerDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
-      className="fixed z-[80] w-64 max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-2xl border border-slate-700/80 bg-slate-950 p-1.5 text-sm text-slate-200 shadow-2xl shadow-black/35"
-      style={{ left: state.x, top: state.y }}
+      className="fixed z-[80] w-max min-w-28 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-xl border border-slate-700/80 bg-slate-950 p-1 text-[13px] text-slate-200 shadow-2xl shadow-black/35"
+      style={{ left: state.x, top: menuTop }}
     >
       {state.view === "actions" && (
-        <>
-          <div className="mb-1 grid grid-cols-7 gap-0.5 border-b border-slate-800 px-1 pb-2 pt-1">
-            {MESSAGE_REACTIONS.slice(0, 6).map((reaction) => (
-              <button
-                type="button"
-                key={reaction}
-                aria-label={`React with ${reaction}`}
-                aria-pressed={state.message.reaction === reaction}
-                onClick={() => onReact(reaction)}
-                className={`flex h-8 items-center justify-center rounded-lg text-lg transition hover:bg-slate-800 ${state.message.reaction === reaction ? "bg-indigo-500/20" : ""}`}
-              >
-                {reaction}
-              </button>
-            ))}
-            <button
-              type="button"
-              aria-label="More reactions"
-              onClick={() => onChangeView("reactions")}
-              className="flex h-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
-            >
-              <Plus aria-hidden="true" className="h-5 w-5" />
-            </button>
-          </div>
-          <MenuAction icon={Reply} label="Reply" onClick={onReply} autoFocus />
-          <MenuAction icon={Copy} label="Copy" onClick={onCopy} />
-          <MenuAction icon={SmilePlus} label="React" onClick={() => onChangeView("reactions")} />
-          <MenuAction icon={Forward} label="Forward" onClick={() => onChangeView("forward")} />
-          <MenuAction icon={Pin} label={state.message.pinned ? "Unpin" : "Pin"} onClick={onTogglePin} />
-          <MenuAction icon={Sparkles} label="Ask" onClick={onAsk} />
-          <MenuAction icon={Star} label={state.message.starred ? "Unstar" : "Star"} onClick={onToggleStar} />
-          <div className="my-1 border-t border-slate-800" />
-          <MenuAction icon={MessageSquare} label="Feedback" onClick={() => onChangeView("feedback")} />
-          <MenuAction icon={Trash2} label="Delete" onClick={onDelete} danger />
-        </>
+        state.source === "context" && state.selectedText ? (
+          <>
+            <MenuAction label="Copy" onClick={onCopy} />
+            <MenuAction label="Ask" onClick={onAsk} />
+          </>
+        ) : (
+          <>
+            <MenuAction label="Reply" onClick={onReply} />
+            <MenuAction label="Copy" onClick={onCopy} />
+            <MenuAction label="Delete" onClick={onDelete} danger />
+          </>
+        )
       )}
 
       {state.view === "reactions" && (
         <>
           <MenuBack title="React" onBack={() => onChangeView("actions")} />
-          <div className="grid grid-cols-5 gap-1 p-2">
+          <div className="grid grid-cols-5 gap-0.5 p-1.5">
             {MESSAGE_REACTIONS.map((reaction) => (
               <button
                 type="button"
@@ -1307,7 +1457,7 @@ function MessageContextMenu({
                 aria-label={`React with ${reaction}`}
                 aria-pressed={state.message.reaction === reaction}
                 onClick={() => onReact(reaction)}
-                className={`flex h-10 items-center justify-center rounded-xl text-xl transition hover:bg-slate-800 ${state.message.reaction === reaction ? "bg-indigo-500/20 ring-1 ring-indigo-400/40" : ""}`}
+                className={`flex h-8 items-center justify-center rounded-lg text-lg transition hover:bg-slate-800 ${state.message.reaction === reaction ? "bg-indigo-500/20 ring-1 ring-indigo-400/40" : ""}`}
               >
                 {reaction}
               </button>
@@ -1319,18 +1469,17 @@ function MessageContextMenu({
       {state.view === "forward" && (
         <>
           <MenuBack title="Forward to" onBack={() => onChangeView("actions")} />
-          <div className="max-h-64 overflow-y-auto py-1">
+          <div className="max-h-64 overflow-y-auto py-0.5">
             {otherThreads.length === 0 ? (
-              <div className="px-3 py-5 text-center text-xs text-slate-500">No other conversations yet</div>
+              <div className="px-2.5 py-4 text-center text-xs text-slate-500">No other conversations yet</div>
             ) : (
               otherThreads.map((thread) => (
                 <button
                   type="button"
                   key={thread.id}
                   onClick={() => onForward(thread.id)}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-800"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-slate-800"
                 >
-                  <Forward aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
                   <span className="min-w-0 flex-1 truncate">{thread.title}</span>
                 </button>
               ))
@@ -1342,14 +1491,14 @@ function MessageContextMenu({
       {state.view === "feedback" && (
         <>
           <MenuBack title="Feedback" onBack={() => onChangeView("actions")} />
-          <div className="py-1">
+          <div className="py-0.5">
             {MESSAGE_FEEDBACK.map((feedback) => (
               <button
                 type="button"
                 key={feedback}
                 aria-pressed={state.message.feedback === feedback}
                 onClick={() => onFeedback(feedback)}
-                className={`w-full rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-800 ${state.message.feedback === feedback ? "bg-indigo-500/15 text-indigo-200" : ""}`}
+                className={`w-full rounded-lg px-2.5 py-2 text-left transition hover:bg-slate-800 ${state.message.feedback === feedback ? "bg-indigo-500/15 text-indigo-200" : ""}`}
               >
                 {feedbackLabels[feedback]}
               </button>
@@ -1363,42 +1512,35 @@ function MessageContextMenu({
 
 function MenuBack({ title, onBack }: { title: string; onBack: () => void }) {
   return (
-    <div className="flex items-center gap-2 border-b border-slate-800 px-1 pb-1.5">
+    <div className="flex items-center gap-2 border-b border-slate-800 px-0.5 pb-1">
       <button
         type="button"
         onClick={onBack}
-        aria-label="Back to message options"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
+        className="rounded-md px-1 py-1 text-[12px] text-slate-400 transition hover:bg-slate-800 hover:text-white"
       >
-        <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+        Back
       </button>
-      <span className="font-medium">{title}</span>
+      <span className="text-[13px] font-medium">{title}</span>
     </div>
   );
 }
 
 function MenuAction({
-  icon: Icon,
   label,
   onClick,
   danger = false,
-  autoFocus = false,
 }: {
-  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   label: string;
   onClick: () => void;
   danger?: boolean;
-  autoFocus?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
-      autoFocus={autoFocus}
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${danger ? "text-rose-300 hover:bg-rose-500/10" : "hover:bg-slate-800"}`}
+      className={`flex w-full items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-left transition ${danger ? "text-rose-300 hover:bg-rose-500/10" : "hover:bg-slate-800"}`}
     >
-      <Icon aria-hidden={true} className="h-5 w-5 shrink-0" />
       <span>{label}</span>
     </button>
   );

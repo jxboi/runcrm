@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Building2, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Home, MessageSquare, Pencil, Pin, Plus } from "lucide-react";
+import { Building2, ChevronDown, Ellipsis, Home, MessageSquare, Pencil, Pin, Plus } from "lucide-react";
 import { Agent, ChatThread, Recipient, ThreadFilter, ThreadUpdate } from "@/lib/types";
 import { AgentIcon } from "@/app/components/AgentIcon";
 
@@ -86,6 +86,19 @@ function ThreadIcon({ kind, className = "h-4 w-4" }: { kind: "home" | "account" 
   return <Icon aria-hidden="true" className={className} strokeWidth={1.8} />;
 }
 
+export function SidebarToggleIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.7" />
+      {collapsed ? (
+        <path d="M9 7v10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+      ) : (
+        <path d="M9 3.75v16.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+      )}
+    </svg>
+  );
+}
+
 function SectionAction({
   disabled,
   onClick,
@@ -126,6 +139,8 @@ export default function Sidebar({
   onSelect,
   onNewAgent,
   onEditAgent,
+  collapsed,
+  onCollapsedChange,
 }: {
   threads: ChatThread[];
   activeThreadId: number;
@@ -141,10 +156,11 @@ export default function Sidebar({
   onSelect: (id: Recipient) => void;
   onNewAgent: () => void;
   onEditAgent: (agent: Agent) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 }) {
   const [savingThread, setSavingThread] = useState(false);
   const [updatingThreadId, setUpdatingThreadId] = useState<number | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
   const [conversationsOpen, setConversationsOpen] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
   const [visibleThreadCount, setVisibleThreadCount] = useState(INITIAL_THREAD_COUNT);
@@ -292,7 +308,7 @@ export default function Sidebar({
       data-collapsed={collapsed || undefined}
       className={`crm-sidebar flex shrink-0 flex-col overflow-x-hidden bg-slate-950 transition-[width] duration-200 motion-reduce:transition-none ${collapsed ? "w-20" : "w-[clamp(12.5rem,18vw,16rem)]"}`}
     >
-      <div className={`flex shrink-0 items-center ${collapsed ? "justify-center px-3 pb-6 pt-5" : "gap-3 px-4 pb-4 pt-5"}`}>
+      <div className={`flex h-16 shrink-0 items-center ${collapsed ? "justify-center px-3" : "gap-3 px-4"}`}>
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -305,11 +321,11 @@ export default function Sidebar({
           type="button"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!collapsed}
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={() => onCollapsedChange(!collapsed)}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`flex shrink-0 items-center justify-center border text-slate-500 transition-colors hover:text-slate-900 ${collapsed ? "h-11 w-11 rounded-xl border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50" : "ml-auto h-8 w-8 rounded-lg border-transparent hover:border-slate-700 hover:bg-slate-900 hover:text-slate-200"}`}
+          className={`crm-sidebar-toggle flex shrink-0 items-center justify-center text-slate-500 transition-colors hover:text-slate-400 ${collapsed ? "h-11 w-11 rounded-xl bg-white" : "ml-auto h-8 w-8 rounded-lg bg-transparent"}`}
         >
-          {collapsed ? <ChevronRight aria-hidden="true" className="h-4 w-4" /> : <ChevronLeft aria-hidden="true" className="h-4 w-4" />}
+          <SidebarToggleIcon collapsed={collapsed} />
         </button>
       </div>
 
@@ -407,15 +423,16 @@ export default function Sidebar({
                       aria-current={selected ? "page" : undefined}
                       aria-label={`Open ${thread.title} conversation${thread.unread ? ", unread" : ""}`}
                       onClick={() => onSelectThread(thread.id)}
+                      title={collapsed ? thread.title : undefined}
                       className={`relative flex w-full items-center overflow-hidden rounded-xl border text-left transition-colors ${collapsed ? "h-11 justify-center p-0" : "h-9 min-w-0 pl-3 pr-10"} ${
                         selected
-                          ? "border-transparent bg-indigo-500/[0.08]"
+                          ? "border-transparent bg-indigo-500/[0.10]"
                           : collapsed ? "border-transparent hover:bg-slate-100" : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
                       }`}
                     >
                       {collapsed ? (
-                        <span className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${selected ? "text-slate-900" : "text-slate-500"}`}>
-                          {kind !== "chat" && <ThreadIcon kind={kind} />}
+                        <span className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${selected ? "text-indigo-600" : "text-slate-500"}`}>
+                          <ThreadIcon kind={kind} />
                           {thread.unread && <span aria-hidden="true" className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-slate-950" />}
                         </span>
                       ) : (
@@ -510,13 +527,13 @@ export default function Sidebar({
                     aria-pressed={selected}
                     onClick={() => onSelect(agent.id)}
                     title={collapsed ? agent.name : undefined}
-                    className={`relative flex w-full items-center overflow-hidden rounded-xl border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/45 ${collapsed ? "h-12 justify-center p-0" : "gap-2 py-1.5 pl-2.5 pr-10"} ${
+                    className={`relative flex w-full items-center overflow-hidden rounded-xl border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/45 ${collapsed ? "h-11 justify-center p-0" : "gap-2 py-1.5 pl-2.5 pr-10"} ${
                       selected
-                        ? collapsed ? "border-transparent bg-slate-200/75" : "border-transparent bg-transparent"
+                        ? collapsed ? "border-indigo-200/80 bg-indigo-500/[0.10]" : "border-transparent bg-transparent"
                         : collapsed ? "border-transparent hover:bg-slate-100" : "border-transparent hover:border-slate-700/70 hover:bg-slate-800/55"
                     }`}
                   >
-                    <span className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${selected ? collapsed ? "bg-transparent text-slate-900" : "bg-indigo-950 text-indigo-300" : collapsed ? "bg-transparent text-slate-500" : "bg-slate-800/80"}`}>
+                    <span className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${selected ? collapsed ? "bg-transparent text-indigo-600" : "bg-indigo-950 text-indigo-300" : collapsed ? "bg-transparent text-slate-500" : "bg-slate-800/80"}`}>
                       <AgentIcon icon={agent.emoji} name={agent.name} className="h-4 w-4" />
                       {collapsed && busy && <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-indigo-400 ring-2 ring-slate-950" />}
                     </span>

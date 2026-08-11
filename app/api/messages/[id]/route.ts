@@ -19,6 +19,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   const update: MessageUpdate = {};
+  if ("content" in body) {
+    if (typeof body.content !== "string" || !body.content.trim()) {
+      return NextResponse.json({ error: "content must be a non-empty string" }, { status: 400 });
+    }
+    update.content = body.content;
+  }
   if ("reaction" in body) {
     if (body.reaction !== null && !MESSAGE_REACTIONS.includes(body.reaction as MessageReaction)) {
       return NextResponse.json({ error: "Unsupported reaction" }, { status: 400 });

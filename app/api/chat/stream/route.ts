@@ -21,7 +21,13 @@ export const maxDuration = 300;
  * persisted here, because the client saves the partial it already has.
  */
 export async function POST(req: NextRequest) {
-  let body: { content?: string; agentId?: number | "auto" | null; threadId?: number; replyToId?: number | null; context?: { workflowId?: number | null } };
+  let body: {
+    content?: string;
+    agentId?: number | "auto" | null;
+    threadId?: number;
+    replyToId?: number | null;
+    context?: { workflowId?: number | null; annotationText?: string | null };
+  };
   try {
     body = await req.json();
   } catch {
@@ -70,8 +76,12 @@ export async function POST(req: NextRequest) {
     }
 
     const workflowId = Number(body.context?.workflowId);
+    const annotationText = typeof body.context?.annotationText === "string"
+      ? body.context.annotationText.trim().slice(0, 2_000)
+      : null;
     await runChain(queue, emit, signal, thread, {
       workflowId: Number.isInteger(workflowId) && workflowId > 0 ? workflowId : null,
+      annotationText: annotationText || null,
     });
   });
 }

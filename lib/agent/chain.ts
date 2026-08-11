@@ -26,7 +26,7 @@ export async function runChain(
   emit: EmitFn,
   signal: AbortSignal,
   thread: ChatThreadContext,
-  context: { workflowId?: number | null } = {}
+  context: { workflowId?: number | null; annotationText?: string | null } = {}
 ): Promise<ChainOutcome> {
   const answered = new Set(queue.map((a) => a.id));
   const pending = [...queue];
@@ -37,7 +37,13 @@ export async function runChain(
     const agent = pending.shift()!;
     emit({ type: "agent_start", agentId: agent.id, agentName: agent.name, agentEmoji: agent.emoji });
 
-    const result = await runAgentTurn(agent, { signal, onEvent: emit, thread, workflowId: context.workflowId });
+    const result = await runAgentTurn(agent, {
+      signal,
+      onEvent: emit,
+      thread,
+      workflowId: context.workflowId,
+      annotationText: context.annotationText,
+    });
     if (signal.aborted) return outcome;
 
     const message = await insertMessage({

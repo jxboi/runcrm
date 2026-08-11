@@ -19,7 +19,10 @@ export default function DropdownMenu({
   portal = true,
   renderValue,
   menuClassName,
+  optionClassName,
+  borderless = false,
   showChevron = true,
+  showSelectedIndicator = false,
 }: {
   options: DropdownOption[];
   value: string;
@@ -33,7 +36,10 @@ export default function DropdownMenu({
   portal?: boolean;
   renderValue?: (option: DropdownOption | undefined) => ReactNode;
   menuClassName?: string;
+  optionClassName?: string;
+  borderless?: boolean;
   showChevron?: boolean;
+  showSelectedIndicator?: boolean;
 }) {
   const selectedOption = options.find((item) => item.value === value) ?? options[0];
 
@@ -45,7 +51,9 @@ export default function DropdownMenu({
             id={id}
             aria-label={ariaLabel}
             aria-controls={`${id}-options`}
-            className={`crm-dropdown-trigger inline-flex h-9 w-full items-center gap-2 rounded-lg border border-slate-700 bg-transparent px-2.5 text-xs font-medium outline-none transition hover:border-indigo-500/60 ${buttonClassName ?? ""}`}
+            className={`crm-dropdown-trigger inline-flex h-9 w-full items-center gap-2 rounded-lg bg-transparent px-2.5 text-xs font-medium outline-none transition ${
+              borderless ? "" : "border border-slate-700 hover:border-slate-500 focus:border-slate-500"
+            } ${buttonClassName ?? ""}`}
           >
             {LeadingIcon && <LeadingIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={1.8} />}
             {renderValue ? renderValue(selectedOption) : <span className="min-w-0 flex-1 truncate text-left">{selectedOption?.label ?? ""}</span>}
@@ -63,24 +71,27 @@ export default function DropdownMenu({
             anchor="bottom start"
             portal={portal}
             transition
-            className={`z-[70] mt-2 w-max min-w-[var(--button-width)] max-w-[calc(100vw-2rem)] origin-top-left overflow-x-auto rounded-2xl border border-slate-700 bg-slate-950 p-1.5 text-slate-200 shadow-xl shadow-slate-900/10 outline-none transition duration-100 ease-out data-closed:scale-95 data-closed:opacity-0 data-enter:ease-out data-leave:duration-75 data-leave:ease-in ${menuClassName ?? ""}`}
+            className={`z-[70] mt-2 w-max min-w-[var(--button-width)] max-w-[calc(100vw-2rem)] origin-top-left overflow-x-auto rounded-2xl bg-slate-950 p-1.5 text-slate-200 shadow-xl shadow-slate-900/10 outline-none transition duration-100 ease-out data-closed:scale-95 data-closed:opacity-0 data-enter:ease-out data-leave:duration-75 data-leave:ease-in ${
+              borderless ? "" : "border border-slate-700"
+            } ${menuClassName ?? ""}`}
           >
             {options.map((item) => (
               <MenuItem key={item.value}>
                 {({ focus }) => (
                   <button
                     type="button"
-                    title={item.label}
                     aria-label={item.label}
                     onClick={() => onChange(item.value)}
-                    className={`crm-dropdown-option flex w-full items-center rounded-xl text-left text-sm transition ${
-                      renderOption ? "h-9 justify-center p-0" : "justify-between px-3 py-2.5"
+                    className={`crm-dropdown-option flex w-full items-center rounded-xl text-left transition ${
+                      renderOption ? "h-9 justify-center p-0 text-sm" : `justify-between ${optionClassName ?? "px-3 py-2.5 text-sm"}`
                     } ${
                       focus ? "bg-slate-800 text-slate-100" : "text-slate-300"
                     }`}
                   >
                     {renderOption ? renderOption(item, value === item.value) : <span className="whitespace-nowrap">{item.label}</span>}
-                    {!renderOption && value === item.value && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />}
+                    {!renderOption && showSelectedIndicator && value === item.value && (
+                      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
+                    )}
                   </button>
                 )}
               </MenuItem>

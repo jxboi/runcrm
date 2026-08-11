@@ -28,6 +28,8 @@ export interface RunOptions {
   thread?: ChatThreadContext;
   /** The graph currently open beside chat, if the user is in Workflow Studio. */
   workflowId?: number | null;
+  /** Text the user selected and attached to their current question. */
+  annotationText?: string | null;
 }
 
 async function buildSystemPrompt(agent: Agent, thread: ChatThreadContext, workflowId?: number | null): Promise<string> {
@@ -117,9 +119,14 @@ ${workflowContext}
 Today's date: ${new Date().toISOString().slice(0, 10)}`;
 }
 
-async function buildHistory(agent: Agent, threadId: number): Promise<Anthropic.Beta.BetaMessageParam[]> {
+async function buildHistory(
+  agent: Agent,
+  threadId: number,
+  annotationText?: string | null
+): Promise<Anthropic.Beta.BetaMessageParam[]> {
   const recent = (await listMessages(200, threadId)).slice(-60);
   const history: Anthropic.Beta.BetaMessageParam[] = [];
+  let latestUserMessage = -1;
   for (const m of recent) {
     const replyContext = m.reply_to_content
       ? `\n[Replying to ${m.reply_to_role === "user" ? "the user" : m.reply_to_agent_name ?? "an agent"}: ${m.reply_to_content.slice(0, 500)}]`
@@ -133,6 +140,13 @@ async function buildHistory(agent: Agent, threadId: number): Promise<Anthropic.B
     } else {
       const label = m.role === "user" ? "[User]" : `[${m.agent_name ?? "Agent"}]`;
       history.push({ role: "user", content: `${label} ${content}` });
+      if (m.role === "user") latestUserMessage = history.length - 1;
+    }
+  }
+  if (annotationText && latestUserMessage >= 0) {
+    const message = history[latestUserMessage];
+    if (typeof message.content === "string") {
+      message.content += `\n\n[Selected annotation: ${annotationText}]`;
     }
   }
   // The API requires the first message to be a user turn.
@@ -155,7 +169,7 @@ export async function runAgentTurn(agent: Agent, opts: RunOptions = {}): Promise
   const thread = opts.thread ?? (await getThread(1));
   if (!thread) throw new Error("The Home thread is unavailable");
   const system = await buildSystemPrompt(agent, thread, opts.workflowId);
-  const messages = await buildHistory(agent, thread.id);
+  const messages = await buildHistory(agent, thread.id, opts.annotationText);
   const mutationIds: number[] = [];
   const proposalIds: number[] = [];
   let handoff: HandoffRequest | undefined;

@@ -35,6 +35,7 @@ export default function Workspace() {
   const [focusRef, setFocusRef] = useState<EntityRef | null>(null);
   const [modal, setModal] = useState<"closed" | "new" | Agent>("closed");
   const [toast, setToast] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workflowContexts, setWorkflowContexts] = useState<Record<number, number | null>>({});
   const workflowEnabled = Object.prototype.hasOwnProperty.call(workflowContexts, activeThreadId);
   const selectedWorkflowId = workflowContexts[activeThreadId] ?? null;
@@ -395,7 +396,7 @@ export default function Workspace() {
   );
 
   const sendMessage = useCallback(
-    async (content: string, replyToId?: number): Promise<boolean> => {
+    async (content: string, replyToId?: number, annotationText?: string): Promise<boolean> => {
       if (agents.length === 0) {
         showToast("Create an agent first");
         return false;
@@ -447,7 +448,9 @@ export default function Workspace() {
           agentId: recipient,
           threadId,
           replyToId: replyTo?.id ?? null,
-          context: workflowEnabled ? { workflowId: selectedWorkflowId } : undefined,
+          context: workflowEnabled || annotationText
+            ? { workflowId: workflowEnabled ? selectedWorkflowId : undefined, annotationText }
+            : undefined,
         },
         `chat-${optimistic.id}`,
         threadId,
@@ -490,13 +493,14 @@ export default function Workspace() {
           body: JSON.stringify(update),
         });
         setMessages((current) => mergeMessages(current, [saved]));
+        if (update.content !== undefined) await loadThreads();
       } catch (error) {
         setMessages((current) => current.map((item) => (item.id === message.id ? message : item)));
         showToast(error instanceof Error ? error.message : "Couldn't update that message");
         throw error;
       }
     },
-    [showToast]
+    [loadThreads, showToast]
   );
 
   const forwardChatMessage = useCallback(
@@ -603,22 +607,26 @@ export default function Workspace() {
   return (
     <div className="crm-workspace h-dvh min-h-0">
       <div className="crm-frame flex h-full overflow-hidden">
-        <Sidebar
-          threads={threads}
-          activeThreadId={activeThreadId}
-          onSelectThread={selectThread}
-          onCreateThread={createThread}
-          onUpdateThread={updateThread}
-          onContinueThread={continueThread}
-          threadFilter={threadFilter}
-          onThreadFilterChange={changeThreadFilter}
-          agents={agents}
-          selectedAgentId={recipient === "auto" ? null : recipient}
-          busyAgentIds={busyAgentIds}
-          onSelect={setRecipient}
-          onNewAgent={() => setModal("new")}
-          onEditAgent={(a) => setModal(a)}
-        />
+        {!sidebarCollapsed && (
+          <Sidebar
+            threads={threads}
+            activeThreadId={activeThreadId}
+            onSelectThread={selectThread}
+            onCreateThread={createThread}
+            onUpdateThread={updateThread}
+            onContinueThread={continueThread}
+            threadFilter={threadFilter}
+            onThreadFilterChange={changeThreadFilter}
+            agents={agents}
+            selectedAgentId={recipient === "auto" ? null : recipient}
+            busyAgentIds={busyAgentIds}
+            onSelect={setRecipient}
+            onNewAgent={() => setModal("new")}
+            onEditAgent={(a) => setModal(a)}
+            collapsed={sidebarCollapsed}
+            onCollapsedChange={setSidebarCollapsed}
+          />
+        )}
         <main className="crm-canvas flex min-w-0 flex-1 flex-col border-l border-r border-slate-800/90 bg-slate-950">
           <Chat
             key={activeThread.id}
@@ -643,6 +651,8 @@ export default function Workspace() {
             workflowContext={workflowEnabled ? { name: selectedWorkflowId ? `workflow #${selectedWorkflowId}` : null } : null}
             onEnableWorkflow={enableWorkflow}
             onDisableWorkflow={disableWorkflow}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
           />
         </main>
         <DataPanel

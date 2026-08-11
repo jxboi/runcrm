@@ -1,17 +1,19 @@
 "use client";
 
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
 import {
   CalendarDays,
+  Check,
+  ChevronLeft,
   ChevronRight,
   FileText,
   Info,
-  LayoutList,
   Mail,
-  PanelsTopLeft,
   Pencil,
   Phone,
   Play,
+  Plus,
   RefreshCw,
   Search,
   SlidersHorizontal,
@@ -75,16 +77,154 @@ function handleTabKeyDown<T extends string>(
 
 type ViewMenuOption = { id: Tab; label: string; count: number; attention?: boolean };
 
+type ContactMenuOption = { value: string; label: string };
+type ContactMenuSection = "root" | "status" | "sort";
+
+function ContactViewMenu({
+  statusFilter,
+  sortBy,
+  onStatusChange,
+  onSortChange,
+}: {
+  statusFilter: string;
+  sortBy: string;
+  onStatusChange: (value: string) => void;
+  onSortChange: (value: string) => void;
+}) {
+  const [section, setSection] = useState<ContactMenuSection>("root");
+  const statusOptions: ContactMenuOption[] = [
+    { value: "all", label: "All" },
+    ...CONTACT_STATUSES.map((status) => ({
+      value: status,
+      label: status.charAt(0).toUpperCase() + status.slice(1),
+    })),
+  ];
+  const sortOptions: ContactMenuOption[] = [
+    { value: "none", label: "None" },
+    { value: "recent", label: "Recently updated" },
+    { value: "name-asc", label: "Name A–Z" },
+    { value: "name-desc", label: "Name Z–A" },
+  ];
+
+  const selectStatus = (value: string, close: () => void) => {
+    onStatusChange(value);
+    close();
+  };
+
+  const selectSort = (value: string, close: () => void) => {
+    onSortChange(value);
+    close();
+  };
+
+  return (
+    <Popover as="div" className="relative w-auto shrink-0">
+      {({ close }) => (
+        <>
+          <PopoverButton
+            id="crm-contact-view-options"
+            aria-label="Contact filter and sort options"
+            title="Filter and sort contacts"
+            onClick={() => setSection("root")}
+            className="crm-dropdown-trigger inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 outline-none transition hover:bg-slate-900 hover:text-slate-200 focus-visible:bg-slate-900 focus-visible:text-indigo-300"
+          >
+            <SlidersHorizontal aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+          </PopoverButton>
+          <PopoverPanel
+            aria-label="Contact filter and sort options"
+            anchor="bottom start"
+            portal
+            transition
+            className="z-[70] mt-2 w-48 origin-top-left rounded-2xl bg-slate-900 p-1 text-slate-200 shadow-xl shadow-slate-900/10 outline-none transition duration-100 ease-out data-closed:scale-95 data-closed:opacity-0 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+          >
+            {section === "root" ? (
+              <div className="space-y-0.5" role="menu">
+                <ContactMenuSectionButton label="Filter by status" onClick={() => setSection("status")} />
+                <ContactMenuSectionButton label="Sort by" onClick={() => setSection("sort")} />
+              </div>
+            ) : (
+              <div role="menu">
+                <button
+                  type="button"
+                  onClick={() => setSection("root")}
+                  className="flex w-full items-center gap-1.5 rounded-xl px-2 py-1.5 text-left text-xs font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus:bg-slate-800 focus:text-slate-100 focus:outline-none"
+                >
+                  <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
+                  {section === "status" ? "Filter by status" : "Sort by"}
+                </button>
+                <div aria-hidden="true" className="my-1 h-px bg-slate-800" />
+                {(section === "status" ? statusOptions : sortOptions).map((option) => (
+                  <ContactMenuOptionButton
+                    key={option.value}
+                    option={option}
+                    selected={section === "status" ? statusFilter === option.value : sortBy === option.value}
+                    onClick={() => section === "status" ? selectStatus(option.value, close) : selectSort(option.value, close)}
+                  />
+                ))}
+              </div>
+            )}
+          </PopoverPanel>
+        </>
+      )}
+    </Popover>
+  );
+}
+
+function ContactMenuSectionButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-xs font-medium text-slate-300 transition hover:bg-slate-800 hover:text-slate-100 focus:bg-slate-800 focus:text-slate-100 focus:outline-none"
+    >
+      {label}
+      <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 text-slate-500" strokeWidth={2} />
+    </button>
+  );
+}
+
+function ContactMenuOptionButton({
+  option,
+  selected,
+  onClick,
+}: {
+  option: ContactMenuOption;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      aria-label={option.label}
+      aria-current={selected || undefined}
+      onClick={onClick}
+      className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-xs text-slate-300 transition hover:bg-slate-800 hover:text-slate-100 focus:bg-slate-800 focus:text-slate-100 focus:outline-none"
+    >
+      <span>{option.label}</span>
+      {selected && <Check aria-hidden="true" className="h-3.5 w-3.5 text-indigo-400" strokeWidth={2} />}
+    </button>
+  );
+}
+
 function ViewMenu({
   options,
   value,
   onChange,
   buttonId,
+  className = "w-auto shrink-0",
+  buttonClassName = "w-max justify-end rounded-full bg-slate-900 px-3 text-slate-200 hover:bg-slate-800",
+  menuClassName = "-translate-x-2 bg-slate-900",
+  optionClassName,
 }: {
   options: ViewMenuOption[];
   value: Tab;
   onChange: (value: Tab) => void;
   buttonId: string;
+  className?: string;
+  buttonClassName?: string;
+  menuClassName?: string;
+  optionClassName?: string;
 }) {
   return (
     <DropdownMenu
@@ -93,8 +233,13 @@ function ViewMenu({
       onChange={(nextValue) => onChange(nextValue as Tab)}
       id={buttonId}
       ariaLabel="Choose view"
-      className="w-full min-w-[6rem] max-w-[8rem]"
-      buttonClassName="text-indigo-200"
+      className={className}
+      buttonClassName={buttonClassName}
+      menuClassName={menuClassName}
+      optionClassName={optionClassName}
+      borderless
+      renderValue={(option) => <span className="truncate">{option?.label ?? ""}</span>}
+      showSelectedIndicator={false}
     />
   );
 }
@@ -150,13 +295,6 @@ function useFocusedRecord(focusRef: EntityRef | null, setTab: (tab: Tab) => void
 function focusClass(focusedId: string | null, entity: Entity, id: number): string {
   return focusedId === `${entity}-${id}` ? " ring-2 ring-indigo-400/70" : "";
 }
-
-const STATUS_PILL: Record<string, string> = {
-  lead: "bg-sky-500/15 text-sky-300 border-sky-500/30",
-  prospect: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  customer: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  churned: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-};
 
 const STAGE_PILL: Record<string, string> = {
   lead: "bg-sky-500/15 text-sky-300 border-sky-500/30",
@@ -287,7 +425,7 @@ export default function DataPanel({
     section === "records"
       ? [
           { id: "contacts", label: "Contacts", count: contacts.length },
-          { id: "sales_reps", label: "Sales reps", count: salesReps.length },
+          { id: "sales_reps", label: "Sales Reps", count: salesReps.length },
           { id: "deals", label: "Deals", count: deals.length },
         ]
       : section === "work"
@@ -332,7 +470,7 @@ export default function DataPanel({
                     selectSection
                   )
                 }
-                className={`-mb-px flex min-w-0 flex-1 items-center justify-center whitespace-nowrap border-b-2 px-1 pt-0.5 text-[11px] font-semibold transition ${
+                className={`-mb-px flex min-w-0 flex-1 items-center justify-center whitespace-nowrap border-b-2 px-1 text-xs font-medium transition ${
                   selected
                     ? "border-indigo-500 text-slate-100"
                     : "border-transparent text-slate-400 hover:border-slate-700 hover:text-slate-200"
@@ -345,14 +483,18 @@ export default function DataPanel({
         </div>
 
         {secondaryTabs ? (
-          <div className="flex min-w-[9rem] flex-1 items-stretch">
+          <div className="flex min-w-[9rem] flex-1 items-stretch justify-end">
             <span aria-hidden="true" className="mx-1.5 my-5 h-6 w-px shrink-0 bg-slate-800/80" />
-            <div className="flex min-w-[6rem] flex-1 items-center">
+            <div className="flex min-w-0 items-center">
               <ViewMenu
                 options={secondaryTabs}
                 value={tab}
                 onChange={selectTab}
                 buttonId={section === "records" ? "crm-view-menu-button" : "crm-work-menu-button"}
+                className={section === "records" ? "w-28 shrink-0" : undefined}
+                buttonClassName={section === "records" ? "w-full justify-between rounded-full bg-slate-900 px-3 text-slate-200 hover:bg-slate-800" : undefined}
+                menuClassName={section === "records" ? "-translate-x-1 bg-slate-900 p-1" : undefined}
+                optionClassName={section === "records" ? "px-2 py-1.5 text-xs" : undefined}
               />
             </div>
           </div>
@@ -598,7 +740,7 @@ function ContactsTab({
   const [savingEdit, setSavingEdit] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"list" | "detailed">("detailed");
+  const [sortBy, setSortBy] = useState("none");
 
   const editHasChanges = editingContact !== null && (
     editingForm.name.trim() !== editingContact.name.trim() ||
@@ -607,14 +749,21 @@ function ContactsTab({
     editingForm.status !== editingContact.status
   );
 
-  const visibleContacts = contacts.filter((contact) => {
-    const matchesQuery = [contact.name, contact.email, contact.company, contact.sales_rep_name, contact.notes]
-      .filter(Boolean)
-      .join(" ")
-      .toLocaleLowerCase()
-      .includes(query.trim().toLocaleLowerCase());
-    return matchesQuery && (statusFilter === "all" || contact.status === statusFilter);
-  });
+  const visibleContacts = contacts
+    .filter((contact) => {
+      const matchesQuery = [contact.name, contact.email, contact.company, contact.sales_rep_name, contact.notes]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(query.trim().toLocaleLowerCase());
+      return matchesQuery && (statusFilter === "all" || contact.status === statusFilter);
+    })
+    .sort((a, b) => {
+      if (sortBy === "recent") return b.updated_at.localeCompare(a.updated_at);
+      if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+      if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+      return 0;
+    });
 
   const create = async () => {
     try {
@@ -676,16 +825,7 @@ function ContactsTab({
   };
 
   return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={onToggleForm}
-        aria-expanded={showForm}
-        aria-controls="add-contact-form"
-        className="w-full rounded-lg border border-dashed border-slate-700 py-2 text-xs text-slate-400 transition hover:border-indigo-500/50 hover:text-indigo-300"
-      >
-        + Add a contact
-      </button>
+    <div>
       {showForm && (
         <ContactFormModal
           mode="add"
@@ -706,7 +846,7 @@ function ContactsTab({
           onSubmit={() => void saveEdit()}
         />
       )}
-      <div className="mb-2.5 flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">Search contacts</span>
           <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={1.8} />
@@ -715,51 +855,26 @@ function ContactsTab({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search contacts"
-            className="crm-contacts-search h-9 w-full rounded-lg border border-slate-700 bg-transparent pl-8 pr-2.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="crm-contacts-search h-9 w-full rounded-lg border border-slate-700 bg-transparent pl-8 pr-2.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-slate-700 focus:outline-none"
           />
         </label>
-        <DropdownMenu
-          options={[
-            { value: "all", label: "All" },
-            ...CONTACT_STATUSES.map((status) => ({
-              value: status,
-              label: status.charAt(0).toUpperCase() + status.slice(1),
-            })),
-          ]}
-          value={statusFilter}
-          onChange={setStatusFilter}
-          id="crm-contact-status-filter"
-          ariaLabel="Filter contacts by status"
-          className="w-24 shrink-0"
-          buttonClassName="text-slate-300"
-          leadingIcon={SlidersHorizontal}
+        <ContactViewMenu
+          statusFilter={statusFilter}
+          sortBy={sortBy}
+          onStatusChange={setStatusFilter}
+          onSortChange={setSortBy}
         />
-        <div role="group" aria-label="Contact view" className="flex h-9 shrink-0 items-center rounded-lg border border-slate-700 p-0.5">
-          <button
-            type="button"
-            aria-pressed={viewMode === "list"}
-            onClick={() => setViewMode("list")}
-            title="List view"
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
-              viewMode === "list" ? "bg-indigo-950 text-indigo-300" : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <LayoutList aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
-            <span className="sr-only">List view</span>
-          </button>
-          <button
-            type="button"
-            aria-pressed={viewMode === "detailed"}
-            onClick={() => setViewMode("detailed")}
-            title="Detailed view"
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition ${
-              viewMode === "detailed" ? "bg-indigo-950 text-indigo-300" : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <PanelsTopLeft aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
-            <span className="sr-only">Detailed view</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onToggleForm}
+          aria-label="Add a contact"
+          aria-expanded={showForm}
+          aria-controls="add-contact-form"
+          title="Add a contact"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-700 text-slate-400 transition hover:border-slate-500 hover:text-slate-200 focus:outline-none focus-visible:border-slate-500 focus-visible:text-slate-200"
+        >
+          <Plus aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+        </button>
       </div>
       <div className="divide-y divide-slate-800/85">
         {visibleContacts.map((c) => (
@@ -767,74 +882,51 @@ function ContactsTab({
             key={c.id}
             data-record={`contacts-${c.id}`}
             aria-labelledby={`contact-${c.id}-name`}
-            className={`${RECORD_ROW_CLASS} ${viewMode === "detailed" ? "py-3.5" : "py-2.5"}${focusClass(focusedId, "contacts", c.id)}`}
+            className={`${RECORD_ROW_CLASS} py-3.5 first:pt-0${focusClass(focusedId, "contacts", c.id)}`}
           >
-            {viewMode === "list" ? (
-              <div className="flex min-w-0 items-center gap-2">
-                <h3
-                  id={`contact-${c.id}-name`}
-                  title={c.name}
-                  className="min-w-0 max-w-[45%] truncate text-sm font-semibold leading-5 text-slate-100"
-                >
-                  {c.name}
-                </h3>
-                <Pill text={c.status} map={STATUS_PILL} />
-                <span
-                  title={c.company || "No company"}
-                  className="min-w-0 flex-1 truncate text-xs text-slate-400"
-                >
-                  {c.company || "No company"}
-                </span>
-                {editButton(c)}
-              </div>
-            ) : (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <h3
-                        id={`contact-${c.id}-name`}
-                        title={c.name}
-                        className="min-w-0 truncate text-sm font-semibold leading-5 text-slate-100"
-                      >
-                        {c.name}
-                      </h3>
-                      <Pill text={c.status} map={STATUS_PILL} />
-                      {c.notes && (
-                        <span
-                          title={c.notes}
-                          aria-label={`Contact note: ${c.notes}`}
-                          tabIndex={0}
-                          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-900 hover:text-indigo-300 focus-visible:bg-slate-900 focus-visible:text-indigo-300"
-                        >
-                          <Info aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      title={[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
-                      className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-400"
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3
+                    id={`contact-${c.id}-name`}
+                    title={c.name}
+                    className="min-w-0 truncate text-sm font-semibold leading-5 text-slate-100"
+                  >
+                    {c.name}
+                  </h3>
+                  {c.notes && (
+                    <span
+                      title={c.notes}
+                      aria-label={`Contact note: ${c.notes}`}
+                      tabIndex={0}
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-900 hover:text-indigo-300 focus-visible:bg-slate-900 focus-visible:text-indigo-300"
                     >
-                      {[c.company, c.email].filter(Boolean).join(" · ") || "No contact details"}
-                    </div>
-                    {c.sales_rep_name && (
-                      <div className="mt-2.5 min-w-0">
-                        <div className="text-[11px] font-medium text-slate-400">Sales rep</div>
-                        <div title={c.sales_rep_name} className="mt-0.5 truncate text-xs font-semibold text-slate-300">
-                          {c.sales_rep_name}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {editButton(c)}
+                      <Info aria-hidden="true" className="h-4 w-4" strokeWidth={1.8} />
+                    </span>
+                  )}
                 </div>
-              </>
-            )}
+                <div
+                  title={[c.company, c.email, c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : ""].filter(Boolean).join(" · ") || "No contact details"}
+                  className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-400"
+                >
+                  {[c.company, c.email, c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : ""].filter(Boolean).join(" · ") || "No contact details"}
+                </div>
+                {c.sales_rep_name && (
+                  <div className="mt-2.5 min-w-0">
+                    <div className="text-[11px] font-medium text-slate-400">Sales rep</div>
+                    <div title={c.sales_rep_name} className="mt-0.5 truncate text-xs font-semibold text-slate-300">
+                      {c.sales_rep_name}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {editButton(c)}
+            </div>
           </article>
         ))}
       </div>
       {visibleContacts.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-700 px-3 py-6 text-center text-xs text-slate-400">
+        <div className="mt-2 rounded-xl border border-dashed border-slate-700 px-3 py-6 text-center text-xs text-slate-400">
           No contacts match your search.
         </div>
       )}

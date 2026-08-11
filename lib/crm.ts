@@ -589,8 +589,17 @@ export async function getMessage(id: number): Promise<ChatMessage | null> {
 
 export async function updateMessage(id: number, input: MessageUpdate): Promise<ChatMessage | null> {
   if (!Number.isInteger(id) || id < 1) return null;
+  const existing = await getMessage(id);
+  if (!existing) return null;
   const fields: string[] = [];
   const values: unknown[] = [];
+  if (input.content !== undefined) {
+    if (existing.role !== "user") return null;
+    const content = input.content.trim();
+    if (!content) return null;
+    fields.push("content = ?");
+    values.push(content);
+  }
   if (input.reaction !== undefined) { fields.push("reaction = ?"); values.push(input.reaction); }
   if (input.pinned !== undefined) { fields.push("pinned = ?"); values.push(input.pinned ? 1 : 0); }
   if (input.starred !== undefined) { fields.push("starred = ?"); values.push(input.starred ? 1 : 0); }
@@ -598,6 +607,9 @@ export async function updateMessage(id: number, input: MessageUpdate): Promise<C
   if (fields.length === 0) return getMessage(id);
   values.push(id);
   await run(`UPDATE messages SET ${fields.join(", ")} WHERE id = ?`, values);
+  if (input.content !== undefined) {
+    await run("UPDATE threads SET updated_at = datetime('now') WHERE id = ?", [existing.thread_id]);
+  }
   return getMessage(id);
 }
 
